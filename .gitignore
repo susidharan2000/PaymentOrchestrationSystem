@@ -1,0 +1,16 @@
+bin/
+
+# ===== Environment files (SECRETS) =====
+.env
+.env.*
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+
+# ===== IDE / Editor =====
+.idea/
+.vscode/
+*.iml
+
+Test_SQL.txt

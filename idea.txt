@@ -1,0 +1,252 @@
+Payment Processing System
+
+A payment system is a machine that records irreversible money facts exactly once, despite retries, crashes, lies, and reordering.
+
+******This system guarantees correctness per payment intent.**********
+
+About the System
+
+1)A payment system is a distributed correctness engine whose only hard rule is:
+ * Never lose money. 
+ * Never create money. 
+ * Never apply effects twice.(no duplicate)
+ * exactly-once recording of facts
+ * at-most-once money movement
+  even every thing crach
+
+2)System prioritize the side effect (money movement) happens atmost once
+
+3)A payment system is a (distributed state machine + ledger) that survives retries, crashes, timeouts, and lies from the network.
+
+4)A payment is a controlled transfer of value between two ledgers.
+5)Payment - coordinated ledger updates with irreversible consequences
+
+authentication is not included because of Auto-capture 
+
+Correctness comes from:
+Ledger on capture
+Webhook + reconciliation
+Idempotency
+
+
+
+Payment States
+
+Non-Terminal State 
+CREATED
+PROCESSING
+UNKNOWN
+
+Terminal State 
+CAPTURED
+FAILED
+CANCELLED
+ 
+
+Payment state transitions (Payment lifeCycle)
+Situation	                         State transition
+User request	                     CREATED
+Worker claims	                     CREATED → PROCESSING 
+PSP explicit decline	             PROCESSING → FAILED
+PSP timeout	                         PROCESSING → UNKNOWN
+Webhook confirms debit	             PROCESSING/UNKNOWN → CAPTURED
+Webhook confirms failure	         UNKNOWN → FAILED
+
+
+Webhook is an optimization, not a dependency.
+Webhook = fast truth
+Reconciliation = guaranteed truth
+
+
+
+System work Flow
+
+1)User cteate the Payment 
+         User
+          ↓
+          ↓  State (Created)
+          ↓
+          DB (Payment_Intent Table)
+
+Crash discussion
+crash happens before presisting the payment state -(NO PROBLEM) client can safly retry beacuse no payment recored exist
+crash happens After presisting the payment state - (NO PROBLEM) if idempotency is used.
+
+2)Worker
+          DB (Payment_Intent Table)
+          ↓
+          ↓ (CREATED → PROCESSING)
+          ↓
+          DB (Payment_Intent Table)
+           
+          PSP (external call.)
+          ↓
+          ↓
+    ← ← ← ← → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → 
+   ↓                                                                             ↓                                                         ↓
+   ↓                                                                             ↓                                                         ↓
+   ↓                                                                             ↓                                                         ↓
+Scenario A — Explicit decline                                           Scenario B — Unknown                                      Scenario C —(auto-capture case)
+Response is clear ,final and negative                                   Worker gets no definitive answer                          PSP returns success
+                                                                                              
+card_declined                                                           Network timeout                                           HTTP 200
+insufficient_funds                                                      PSP server error                                          payment successful
+invalid_card                                                            Connection droppedn                                       charged
+authentication_failed                                                   Worker crashes mid-call
+
+Db State (Payment_Intent Table)                                         Db State (Payment_Intent Table)                            Db State (Payment_Intent Table)
+PROCESSING → FAILED                                                     PROCESSING → UNKNOWN                                       PROCESSING → UNKNOWN
+
+
+PSP API(Not Trustable)
+  *success case is still marked as UNKNOWN beacuse PSP API is not proof that money moved.
+    The PSP ledger is the source of truth.
+    The PSP API response is NOT guaranteed to be based on the ledger.
+
+  *The API response is:
+    A runtime message
+    Produced by application code
+    Possibly sent before ledger commit
+    Possibly sent after ledger commit
+    Possibly lost
+    Possibly duplicated
+    Possibly wrong if the process crashes
+
+
+Crash discussion
+
+Creash After (CREATED → PROCESSING ) and before PSP Call - 
+Crash happens After PSP Call and Before presisting the state(PROCESSING -> FAILED / UNKNOWN) - (NO PROBLEM) Webhook/reconciliation/Projector handles this
+
+
+3)Webhook (push from PSP)
+    * Translate PSP ledger facts into YOUR ledger facts exactly once.
+    * PSP webhook delivery is best-effort, retried, and effectively at-least-once — but NOT guaranteed forever.
+    * PSP sends duplicate webhooks and retries on non-2xx responses.
+    * webhook handler must be idempotent because 
+       PSP Retry webhooks
+       PSP Deliver duplicates
+       Reorder events
+    * Return 2xx ONLY after durable persistence.
+    * Return non-2xx to force retry.
+    * If webhook is not sent, reconciliation will still discover the truth from the PSP ledger.
+
+                                                PSP
+                                                ↓
+                                                ↓ (webhook)
+                                                ↓
+                                                webhook handler
+                                                ↓
+                                                ↓
+                                                ↓
+            ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← → → → → → → → → → → → → → → 
+            ↓                                                                ↓          
+            ↓                                                                ↓
+            ↓                                                                ↓
+           Db (Ledger_Entry Table)                                      Db(PSP_Referance Table) (Optional)
+           (append-only, idempotent)                                    Presist the PSP responce
+           ↓
+           ↓ (only if ledger entry successful)
+           ↓
+           Db(Payment_Intent Table)
+           Success - (PROCESSING -> CAPTURED)
+           Failed - (PROCESSING -> FAILED)
+            
+Crash discussion:
+Crash before the ledger Entry - (NO PROBLEM)
+Crash after Ledger_Entry and before presisting Payment_Intent - reconciliation/Projector  handles this
+Crash before presisting the PSP_Referance - (NO PROBLEM)- correctness does not change because PSP_Referance for log and debugging not correctness 
+
+
+4)Reconciliation (pull from PSP)
+Reconciler is a pull-based correctness worker that resolves uncertainty by querying the PSP ledger and recording the result exactly once.
+
+Reconciler queries the PSP ledger using the strongest available identifier:
+First: psp_reference (if present)
+Fallback: merchant_payment_id (payment_id, always exists)
+
+
+                                             Reconciliation
+                                             ↓
+                                             ↓ (Query PSP ledger with PSP_Referance) if PSP_Referance is NULL use the Merchant_Payment_id (Always Exits if the payment is presisted)
+                                             ↓
+                                             PSP Ledger 
+
+
+                                            Reconciliation 
+                                            ↓
+                                            ↓
+                                            ↓
+            ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← → → → → → → → → → → → → → → 
+            ↓                                                                ↓          
+            ↓                                                                ↓
+            ↓                                                                ↓
+           Db (Ledger_Entry Table)                                      Db(PSP_Referance Table) (Optional)
+           (append-only, idempotent)                                    Presist the PSP responce
+           ↓
+           ↓ (only if ledger entry successful)
+           ↓
+           Db(Payment_Intent Table)
+           Success - (PROCESSING -> CAPTURED)
+           Failed - (PROCESSING -> FAILED)
+
+
+Correctness is presrved
+Reconciler may leave state stale, but it must never lose or duplicate a ledger fact.          
+
+Crash discussion:
+Crash before querying the PSP Ledger - (NO PROBLEM) the Reconcilor retry later
+Crash After query and before presisting in Ledger_Entry Table - (NO PROBLEM)  can retry
+Crash Ater presisting in Ledger_Entry Table and before presisting in Payment_Intent Table - Projector Module Handles it
+
+5) Projector
+
+Projector is allowed to move state ONLY in one direction:
+from non-terminal → terminal, based on ledger facts.
+
+PROCESSING / UNKNOWN → CAPTURED / FAILED
+                                   
+                                   Projector
+                                   ↓
+                                   ↓
+                                   ↓
+                                   Db (Ledger_Entry Table)
+                                   ↓
+                                   ↓ (Update the Payment_Intent Table)
+                                   ↓
+                                   Db (Payment_Intent Table)    
+
+
+
+
+Data Base Schema
+
+1)payment_intent
+    * payment_id - Primary Key
+    * idempotency_key  
+    * state  - CHECK (CREATED, PROCESSING, UNKNOWN, CAPTURED, FAILED, CANCELLED)
+    * amount
+    * currency
+    * psp_ref_id  NULLABLE
+    * psp_name  
+    * create_at
+
+2)ledger_entries (Append only)
+   * ledger_entry_id   PK
+   * entry_type - CAPTURED / FAILED
+   * payment_id  REFERENCES  payment_intent(payment_id)
+   * amount
+   * currency
+   * psp_ref_id 
+   * psp_name 
+   * created_at
+   UNIQUE (psp_name, psp_ref_id) // to support correctness accross multiple PSP's
+
+3)psp_events (Append only)
+   * psp_name
+   * event_type
+   * raw_payload
+
+          
+          
+
