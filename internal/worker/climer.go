@@ -8,13 +8,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/joho/godotenv"
+	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
 )
 
 func StartWorkers(repo workerRepository) {
-	if err := godotenv.Load(); err != nil {
-		log.Print(err)
-	}
 	workerCount := 5 //Default
 	workerCount, err := strconv.Atoi(os.Getenv("WORKER_COUNT"))
 	if err != nil {
@@ -29,17 +26,25 @@ func StartWorkers(repo workerRepository) {
 func worker(repo workerRepository) {
 	for {
 		//claim the payment
-		payment, err := repo.ClaimPayment()
+		paymentDetails, err := repo.ClaimPayment()
 		if err == sql.ErrNoRows {
 			//sleep fop 2 seconds
-			log.Println("no work available")
-			time.Sleep(time.Second * 2)
+			//log.Println("no work available")
+			time.Sleep(time.Second * 10)
 			continue
 		}
 		if err != nil {
 			log.Println(err)
 			continue
 		}
-		fmt.Println(payment)
+		fmt.Println(paymentDetails)
+		//call the External PSP
+		pspId, err := stripeclient.CreatePaymentIntent(paymentDetails)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		fmt.Println(pspId)
+		// update the PSP status to the payment_intent (UNKNOWN/FAILED)
 	}
 }

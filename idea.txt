@@ -247,6 +247,10 @@ Data Base Schema
    * event_type
    * raw_payload
 
+
+
+*****Use Stripe sandbox because it lets you deterministically test failure, webhooks, and reconciliation exactly like production **
+
           
           
 
