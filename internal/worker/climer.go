@@ -2,7 +2,6 @@ package worker
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -37,14 +36,20 @@ func worker(repo workerRepository) {
 			log.Println(err)
 			continue
 		}
-		fmt.Println(paymentDetails)
+		//fmt.Println(paymentDetails)
 		//call the External PSP
-		pspId, err := stripeclient.CreatePaymentIntent(paymentDetails)
+		pspRefID, err := stripeclient.CreatePaymentIntent(paymentDetails)
+		//update the payment_intent State
 		if err != nil {
-			log.Println(err)
-			continue
+			if err := repo.MarkUnknown(paymentDetails.PaymentId, ""); err != nil {
+				log.Println(err)
+			}
+
+		} else {
+			if err := repo.MarkUnknown(paymentDetails.PaymentId, pspRefID); err != nil {
+				log.Println(err)
+			}
 		}
-		fmt.Println(pspId)
-		// update the PSP status to the payment_intent (UNKNOWN/FAILED)
+
 	}
 }

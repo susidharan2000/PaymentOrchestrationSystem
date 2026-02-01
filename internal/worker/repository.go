@@ -2,12 +2,14 @@ package worker
 
 import (
 	"database/sql"
+	"log"
 
 	"github.com/susidharan/payment-orchestration-system/internal/domain"
 )
 
 type workerRepository interface {
 	ClaimPayment() (paymentDetails domain.PaymentParams, err error)
+	MarkUnknown(PaymentId string, pspReferenceID string) error
 }
 
 type repo struct {
@@ -34,7 +36,6 @@ func (r *repo) ClaimPayment() (domain.PaymentParams, error) {
 		SELECT payment_id
 		FROM payment.payment_intent
 		WHERE status = 'CREATED'
-		ORDER BY created_at
 		FOR UPDATE SKIP LOCKED
 		LIMIT 1
 	)
@@ -52,4 +53,16 @@ func (r *repo) ClaimPayment() (domain.PaymentParams, error) {
 	}
 	committed = true
 	return paymentDetails, nil
+}
+
+func (r *repo) MarkUnknown(PaymentId string, pspReferenceID string) error {
+	row, err := r.db.Exec(`UPDATE payment.payment_intent SET status = 'UNKNOWN',psp_ref_id = NULLIF($1,'') WHERE payment.payment_intent.payment_id=$2 AND payment.payment_intent.status='PROCESSING'`, pspReferenceID, PaymentId)
+	if err != nil {
+		return err
+	}
+	res, _ := row.RowsAffected()
+	if res == 0 {
+		log.Println("MarkUnknown skipped: state not PROCESSING", PaymentId)
+	}
+	return nil
 }

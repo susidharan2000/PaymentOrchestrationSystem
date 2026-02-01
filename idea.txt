@@ -14,12 +14,30 @@ About the System
  * at-most-once money movement
   even every thing crach
 
+
 2)System prioritize the side effect (money movement) happens atmost once
 
 3)A payment system is a (distributed state machine + ledger) that survives retries, crashes, timeouts, and lies from the network.
 
 4)A payment is a controlled transfer of value between two ledgers.
 5)Payment - coordinated ledger updates with irreversible consequences
+
+6)Payments are:
+   independent
+   irreversible
+   correctness-critical
+
+7)“stuck forever” as acceptable   **I will resolve stuck payments using a timeout policy, not by ledger facts.**
+  liveness ≠ correctness
+  waiting is safer than guessing
+  timeouts are policy, not truth
+
+  Retries are liveness optimizations not correctness
+
+  Retries, timeouts, and UX fallbacks are layered on top of a correctness-first core.
+
+  Add the retry policy last (Retries, timeouts, and UX fallbacks are layered on top of a correctness-first core.)
+
 
 authentication is not included because of Auto-capture 
 
@@ -35,7 +53,7 @@ Payment States
 Non-Terminal State 
 CREATED
 PROCESSING
-UNKNOWN
+UNKNOWN       means: We do not know the truth yet, but the truth already exists in some ledger.
 
 Terminal State 
 CAPTURED
@@ -115,8 +133,10 @@ PSP API(Not Trustable)
 
 Crash discussion
 
-Creash After (CREATED → PROCESSING ) and before PSP Call - 
-Crash happens After PSP Call and Before presisting the state(PROCESSING -> FAILED / UNKNOWN) - (NO PROBLEM) Webhook/reconciliation/Projector handles this
+Crash after CREATED → PROCESSING and before PSP call
+ - No side effect occurred. Payment may remain stuck indefinitely. This is a liveness issue handled by timeout/cancellation policy. Correctness is preserved.
+Crash after PSP call and before persisting PROCESSING → UNKNOWN
+ - A PSP side effect may have occurred. Truth exists in the PSP ledger. Webhook or reconciliation can record the ledger fact, and the projector can repair state if it was not updated. Correctness is preserved.
 
 
 3)Webhook (push from PSP)
@@ -222,14 +242,15 @@ PROCESSING / UNKNOWN → CAPTURED / FAILED
 Data Base Schema
 
 1)payment_intent
-    * payment_id - Primary Key
+    * payment_id - Primary Key 
     * idempotency_key  
     * state  - CHECK (CREATED, PROCESSING, UNKNOWN, CAPTURED, FAILED, CANCELLED)
     * amount
     * currency
-    * psp_ref_id  NULLABLE
+    * psp_ref_id - NULLABLE
     * psp_name  
     * create_at
+    UNIQUE(idempotency_key)
 
 2)ledger_entries (Append only)
    * ledger_entry_id   PK

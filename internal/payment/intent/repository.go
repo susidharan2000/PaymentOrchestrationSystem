@@ -24,7 +24,7 @@ func (r *repo) CreatePaymentIntentTable() error {
 
 	_, err := r.db.Exec(`CREATE TABLE IF NOT EXISTS  payment.payment_intent(
 		payment_id UUID PRIMARY KEY,
-		idempotency_key TEXT UNIQUE,
+		idempotency_key TEXT NOT NULL UNIQUE,
 		status TEXT NOT NULL CHECK (
 			status IN ('CREATED', 'PROCESSING', 'UNKNOWN', 'CAPTURED', 'FAILED', 'CANCELLED')
 		),
