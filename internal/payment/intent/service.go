@@ -10,11 +10,6 @@ import (
 )
 
 func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
-	//check the method name
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	defer r.Body.Close()

@@ -33,8 +33,9 @@ func main() {
 
 	// get Worker Repo
 	workerRepo := worker.NewWorkerRepository(db)
-	//start paymentWorker poll
-	go worker.StartWorkers(workerRepo)
+	go worker.StartWorkers(workerRepo) //start payment_Worker poll
+
+	//web hook handler
 
 	router := internalhttp.NewRouter(paymentRepo)
 	port := 8080

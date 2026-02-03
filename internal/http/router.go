@@ -9,9 +9,8 @@ import (
 func NewRouter(repo intentService.PaymentRepository) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/payments", func(w http.ResponseWriter, r *http.Request) {
-		intentService.CreatePayment(w, r, repo)
-	})
+	mux.HandleFunc("/payments", createPaymentHandler(repo)) // create Payemnt intent -  client
+	mux.HandleFunc("/webhooks/psp/stripe", stripeWebhook()) // handles stripe webhook
 
 	return mux
 }
