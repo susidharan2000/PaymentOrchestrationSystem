@@ -10,6 +10,7 @@ import (
 	internalhttp "github.com/susidharan/payment-orchestration-system/internal/http"
 	paymentIntent "github.com/susidharan/payment-orchestration-system/internal/payment/intent"
 	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
+	Webhook_ingestor "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor"
 	worker "github.com/susidharan/payment-orchestration-system/internal/worker"
 )
 
@@ -26,18 +27,23 @@ func main() {
 
 	// get payment Repo
 	paymentRepo := paymentIntent.NewPaymentRepository(db)
-	err := paymentRepo.CreatePaymentIntentTable() // Create tables
-	if err != nil {
-		log.Fatal("Table creation Failed")
-	}
-
 	// get Worker Repo
 	workerRepo := worker.NewWorkerRepository(db)
+	//web hook Repo
+	webhookRepo := Webhook_ingestor.NewWebhookRepository(db)
+
+	//create payment Intent table
+	if err := paymentRepo.CreatePaymentIntentTable(); err != nil {
+		log.Fatal("Table creation Failed")
+	}
+	//Create ledge
+	if err := webhookRepo.CreateLedgerEntries(); err != nil {
+		log.Fatal(err)
+	}
+
 	go worker.StartWorkers(workerRepo) //start payment_Worker poll
 
-	//web hook handler
-
-	router := internalhttp.NewRouter(paymentRepo)
+	router := internalhttp.NewRouter(paymentRepo, webhookRepo)
 	port := 8080
 	adr := fmt.Sprintf(":%v", port)
 	srv := &http.Server{
@@ -45,7 +51,7 @@ func main() {
 		Handler: router,
 	}
 	// start server
-	if err = srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Println("http server error:", err)
 	}
 }

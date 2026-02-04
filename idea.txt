@@ -252,9 +252,9 @@ Data Base Schema
     * create_at
     UNIQUE(idempotency_key)
 
-2)ledger_entries (Append only)
+2)ledger_entries (Append only) - frobid DELETE and UPDATE with triggers
    * ledger_entry_id   PK
-   * entry_type - CAPTURED / FAILED
+   * entry_type - CAPTURED / REFUND
    * payment_id  REFERENCES  payment_intent(payment_id)
    * amount
    * currency
