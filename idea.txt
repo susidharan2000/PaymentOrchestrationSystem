@@ -251,6 +251,7 @@ Data Base Schema
     * psp_name  
     * create_at
     UNIQUE(idempotency_key)
+    UNIQUE (psp_ref_id) 
 
 2)ledger_entries (Append only) - frobid DELETE and UPDATE with triggers
    * ledger_entry_id   PK

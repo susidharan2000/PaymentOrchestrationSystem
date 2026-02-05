@@ -34,11 +34,11 @@ func main() {
 
 	//create payment Intent table
 	if err := paymentRepo.CreatePaymentIntentTable(); err != nil {
-		log.Fatal("Table creation Failed")
+		fmt.Printf("create payment_intent table: %w", err)
 	}
 	//Create ledge
 	if err := webhookRepo.CreateLedgerEntries(); err != nil {
-		log.Fatal(err)
+		fmt.Printf("create Ledger Table table: %w", err)
 	}
 
 	go worker.StartWorkers(workerRepo) //start payment_Worker poll

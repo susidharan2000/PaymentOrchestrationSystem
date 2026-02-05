@@ -2,12 +2,15 @@ package webhookingestor
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
 )
 
 type WebhookRepository interface {
 	CreateLedgerEntries() error
-	AppendLedger(piID string, paymentID string, paymentStatus string) error
+	GetPaymentDetails(paymentID string) (PaymemtIntentDetails, error)
+	AppendLedger(PaymentDetails PaymemtIntentDetails) error
 }
 type repo struct {
 	db *sql.DB
@@ -37,6 +40,28 @@ func (r *repo) CreateLedgerEntries() error {
 	return nil
 }
 
-func (r *repo) AppendLedger(piID string, paymentID string, paymentStatus string) error {
+func (r *repo) GetPaymentDetails(paymentID string) (PaymemtIntentDetails, error) {
+	log.Println(paymentID)
+	var PaymentDetails PaymemtIntentDetails
+	err := r.db.QueryRow(`SELECT amount,currency,psp_name FROM payment.payment_intent WHERE payment_id= $1;`, paymentID).Scan(&PaymentDetails.Amount, &PaymentDetails.Currency, &PaymentDetails.PspName)
+	if err != nil {
+		return PaymemtIntentDetails{}, err
+	}
+	return PaymentDetails, nil
+}
+
+func (r *repo) AppendLedger(PaymentDetails PaymemtIntentDetails) error {
+
+	row, err := r.db.Exec(`INSERT INTO payment.ledger_entries (entry_type,payment_id,amount,currency,psp_name,psp_ref_id) VALUES ($1,$2,$3,$4,$5,$6)`, PaymentDetails.Status, PaymentDetails.PaymentId, PaymentDetails.Amount, PaymentDetails.Currency, PaymentDetails.PspName, PaymentDetails.PiID)
+	if err != nil {
+		return err
+	}
+	res, err := row.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if res == 0 {
+		return errors.New("ledger append failed")
+	}
 	return nil
 }

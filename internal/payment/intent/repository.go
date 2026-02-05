@@ -30,12 +30,12 @@ func (r *repo) CreatePaymentIntentTable() error {
 		),
 		amount BIGINT NOT NULL CHECK (amount > 0),
 		currency TEXT NOT NULL,
-		psp_ref_id TEXT,
-		psp_name TEXT NOT NULL,
-		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		psp_ref_id TEXT NULL UNIQUE,
+		psp_name TEXT NULL,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 	);`)
 	if err != nil {
-		log.Println(err)
 		log.Panic(err)
 		return err
 	}
