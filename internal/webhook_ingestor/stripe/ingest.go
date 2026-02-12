@@ -1,9 +1,7 @@
 package stripe
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -45,49 +43,48 @@ func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo Webhook.Webho
 	var pi stripe.PaymentIntent
 	raw, err := json.Marshal(event.Data.Object)
 	if err != nil {
-		log.Println(err)
+		http.Error(w, "missing webhook secret", http.StatusInternalServerError)
 		return
 	}
 	if err = json.Unmarshal(raw, &pi); err != nil {
 		return
 	}
 	piID := pi.ID
-	paymentID := pi.Metadata["payment_id"]
-	log.Printf("PiID: %s , PaymentId: %s", piID, paymentID)
-	//updat the ledger
+	currency := pi.Currency
+	amount := pi.Amount
+
+	var paymentDetails Webhook.WebhookPaymentDetails
+
+	paymentDetails.PiID = piID
+	paymentDetails.Currency = string(currency)
+	paymentDetails.Amount = amount
+	paymentDetails.PspName = "stripe"
+
+	//log.Printf("PiID: %s , PaymentId: %s", piID, paymentID)
+	//update the ledger
 	switch event.Type {
 	case "payment_intent.succeeded":
-		updateWebhookResult(piID, paymentID, "CAPTURED", repo)
+		if err := updateWebhookResult(paymentDetails, "CAPTURED", repo); err != nil {
+			http.Error(w, "ledger write failed", http.StatusInternalServerError)
+			return
+		}
 	case "payment_intent.payment_failed":
-		updateWebhookResult(piID, paymentID, "FAILED", repo)
+		if err := updateWebhookResult(paymentDetails, "FAILED", repo); err != nil {
+			http.Error(w, "ledger write failed", http.StatusInternalServerError)
+			return
+		}
 	default:
 
 	}
 	w.WriteHeader(http.StatusOK)
 }
 
-func updateWebhookResult(piID string, paymentID string, paymentStatus string, repo Webhook.WebhookRepository) {
-	log.Print("Updating Webhook")
-	log.Printf("PiID: %s , PaymentId: %s", piID, paymentID)
-	// query the payment_intern table and get all the data for the ledger
-	paymentDetails, err := repo.GetPaymentDetails(paymentID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return
-		}
-		log.Println("unexpected error:", err)
-		return
+func updateWebhookResult(paymentDetails Webhook.WebhookPaymentDetails, paymentStatus string, repo Webhook.WebhookRepository) error {
+	log.Printf("PiID: %s", paymentDetails)
+	if err := repo.AppendLedger(paymentDetails, paymentStatus); err != nil {
+		log.Println(err)
+		return err
 	}
-	log.Print("paymentDetails retrived")
-	paymentDetails.PiID = piID
-	paymentDetails.PaymentId = paymentID
-	paymentDetails.Status = paymentStatus
-	log.Print("got the payment Details")
-	// Store  the psp event (log) - this should be first because id the crash before appending the "Failed State"
-	// update the ledger entry
-	if err := repo.AppendLedger(paymentDetails); err != nil {
-		log.Panicln(err)
-		return
-	}
-	// if the ledger is success full then update the payment_intent
+	return nil
+	// if the ledger is success full then update the payment_intent (best case)
 }

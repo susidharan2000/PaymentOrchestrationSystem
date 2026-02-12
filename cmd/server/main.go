@@ -32,15 +32,6 @@ func main() {
 	//web hook Repo
 	webhookRepo := Webhook_ingestor.NewWebhookRepository(db)
 
-	//create payment Intent table
-	if err := paymentRepo.CreatePaymentIntentTable(); err != nil {
-		fmt.Printf("create payment_intent table: %w", err)
-	}
-	//Create ledge
-	if err := webhookRepo.CreateLedgerEntries(); err != nil {
-		fmt.Printf("create Ledger Table table: %w", err)
-	}
-
 	go worker.StartWorkers(workerRepo) //start payment_Worker poll
 
 	router := internalhttp.NewRouter(paymentRepo, webhookRepo)

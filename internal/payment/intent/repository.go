@@ -2,14 +2,12 @@ package intent
 
 import (
 	"database/sql"
-	"log"
 
 	"github.com/google/uuid"
 )
 
 type PaymentRepository interface {
 	PersistPaymentRequest(req CreatePaymentRequest) (paymentID string, created bool, err error)
-	CreatePaymentIntentTable() error
 }
 type repo struct {
 	db *sql.DB
@@ -17,29 +15,6 @@ type repo struct {
 
 func NewPaymentRepository(db *sql.DB) PaymentRepository {
 	return &repo{db: db}
-}
-
-// create the Create Payment Intent Table
-func (r *repo) CreatePaymentIntentTable() error {
-
-	_, err := r.db.Exec(`CREATE TABLE IF NOT EXISTS  payment.payment_intent(
-		payment_id UUID PRIMARY KEY,
-		idempotency_key TEXT NOT NULL UNIQUE,
-		status TEXT NOT NULL CHECK (
-			status IN ('CREATED', 'PROCESSING', 'UNKNOWN', 'CAPTURED', 'FAILED', 'CANCELLED')
-		),
-		amount BIGINT NOT NULL CHECK (amount > 0),
-		currency TEXT NOT NULL,
-		psp_ref_id TEXT NULL UNIQUE,
-		psp_name TEXT NULL,
-		created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-		updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-	);`)
-	if err != nil {
-		log.Panic(err)
-		return err
-	}
-	return nil
 }
 
 // create payment request

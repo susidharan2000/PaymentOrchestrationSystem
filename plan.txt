@@ -1,0 +1,177 @@
+==============================
+PHASE 1 — CORRECTNESS CORE
+==============================
+
+Goal:
+Record irreversible money facts exactly once.
+Survive crashes, retries, reordering.
+Derive state from ledger only.
+
+--------------------------------
+1) PAYMENT CREATION (Producer)
+--------------------------------
+- payment_intent table:
+    payment_id (PK)
+    idempotency_key UNIQUE
+    state
+    amount
+    currency
+    psp_ref_id NULLABLE
+    created_at
+
+- Idempotent create endpoint
+- Default state = CREATED
+
+
+--------------------------------
+2) WORKER (Single Execution Attempt)
+--------------------------------
+- Atomic claim:
+    CREATED → PROCESSING
+
+- Lease/timeout reclaim support
+
+- Stripe call:
+    Idempotency-Key = payment_id
+    metadata.merchant_payment_id = payment_id
+
+- After PSP call:
+    Mark state = UNKNOWN
+
+- Never retry inside worker
+- Never overwrite existing psp_ref_id with empty
+
+
+--------------------------------
+3) LEDGER (Append-Only)
+--------------------------------
+- ledger_entries table:
+    ledger_entry_id (PK)
+    psp_name
+    psp_ref_id
+    payment_id NULLABLE
+    entry_type (CAPTURED / FAILED)
+    amount
+    currency
+    created_at
+
+- UNIQUE(psp_name, psp_ref_id)
+
+- Forbid UPDATE and DELETE via DB triggers
+
+
+--------------------------------
+4) WEBHOOK (Fast Truth Ingestion)
+--------------------------------
+- Verify Stripe signature
+- Extract:
+    psp_ref_id
+    amount
+    currency
+    success/failure
+
+- Append ledger entry (idempotent)
+- Allow payment_id = NULL
+- Return 2xx only after durable write
+- Handle duplicates safely
+- Handle reordering safely
+
+
+--------------------------------
+5) RECONCILIATION (Guaranteed Truth)
+--------------------------------
+- Periodic job
+- Query PSP by:
+    psp_ref_id OR merchant_payment_id
+
+- Reuse same ledger ingestion logic
+- Idempotent
+- Crash safe
+
+
+--------------------------------
+6) LINKER (Identity Resolution)
+--------------------------------
+- Find ledger entries where payment_id IS NULL
+- Query PSP for metadata.merchant_payment_id
+- Update ledger entry with correct payment_id
+- Idempotent
+- Deterministic
+- No guessing
+
+
+--------------------------------
+7) STATE PROJECTOR
+--------------------------------
+- Read linked ledger entries
+- Move state:
+    PROCESSING / UNKNOWN → CAPTURED
+    PROCESSING / UNKNOWN → FAILED
+
+- Monotonic only
+- No PSP calls
+- No ledger writes
+
+
+--------------------------------
+8) CRASH TESTING
+--------------------------------
+- Kill worker mid-PSP call
+- Send duplicate webhooks
+- Send reordered webhooks
+- Restart system
+- Verify no duplicate ledger entries
+- Verify state repaired correctly
+
+
+
+================================
+PHASE 2 — LIVENESS & POLICY
+================================
+
+Goal:
+Improve UX and business correctness.
+Layered on top of Phase 1.
+
+--------------------------------
+1) RETRY POLICY ENGINE
+--------------------------------
+- Detect stuck PROCESSING beyond timeout
+- Reclaim job
+- Re-enqueue for execution
+- Safe due to PSP idempotency
+
+
+--------------------------------
+2) BUSINESS GROUPING KEY
+--------------------------------
+- Introduce order_id / payment_group_id
+- Allow multiple payment_intents per order
+
+
+--------------------------------
+3) DUPLICATE DETECTION
+--------------------------------
+- Detect:
+    Multiple CAPTURED for same order_id
+- Deterministic rule:
+    Only one allowed
+
+
+--------------------------------
+4) REFUND ENGINE
+--------------------------------
+- Append REFUND ledger entry
+- Never mutate CAPTURED entry
+- Idempotent refund calls
+- State updated via projector
+
+
+--------------------------------
+5) POLICY DOCUMENTATION
+--------------------------------
+- Timeout rules
+- Duplicate resolution rules
+- Refund behavior
+- Retry behavior
+- Business invariants

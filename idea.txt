@@ -165,12 +165,6 @@ Crash after PSP call and before persisting PROCESSING → UNKNOWN
             ↓                                                                ↓
            Db (Ledger_Entry Table)                                      Db(PSP_Referance Table) (Optional)
            (append-only, idempotent)                                    Presist the PSP responce
-           ↓
-           ↓ (only if ledger entry successful)
-           ↓
-           Db(Payment_Intent Table)
-           Success - (PROCESSING -> CAPTURED)
-           Failed - (PROCESSING -> FAILED)
             
 Crash discussion:
 Crash before the ledger Entry - (NO PROBLEM)
@@ -254,9 +248,9 @@ Data Base Schema
     UNIQUE (psp_ref_id) 
 
 2)ledger_entries (Append only) - frobid DELETE and UPDATE with triggers
-   * ledger_entry_id   PK
-   * entry_type - CAPTURED / REFUND
-   * payment_id  REFERENCES  payment_intent(payment_id)
+   * ledger_entry_id   Primary Key 
+   * entry_type - CAPTURED / FAILED
+   * payment_id  REFERENCES  payment_intent(payment_id) (NULLABLE)   - (It will be resolved by the linker later)
    * amount
    * currency
    * psp_ref_id 
