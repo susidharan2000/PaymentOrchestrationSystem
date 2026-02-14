@@ -36,10 +36,10 @@ func worker(repo workerRepository) {
 			log.Println(err)
 			continue
 		}
-		log.Println(paymentDetails)
+		//log.Println(paymentDetails)
 		//call the External PSP
 		pspRefID, err := stripeclient.CreatePaymentIntent(paymentDetails)
-		log.Println(pspRefID)
+		//log.Println(pspRefID)
 		//update the payment_intent State
 		if err != nil {
 			if err := repo.MarkUnknown(paymentDetails.PaymentId, ""); err != nil {

@@ -228,7 +228,20 @@ PROCESSING / UNKNOWN → CAPTURED / FAILED
                                    ↓
                                    ↓ (Update the Payment_Intent Table)
                                    ↓
-                                   Db (Payment_Intent Table)    
+                                   Db (Payment_Intent Table)   
+
+
+6) Linker (Identity Resolver)
+    * Attach payment_id to ledger rows where it is NULL.
+    * it query the  payment_intent table and update the (ledger payment_id only)
+    * it allow the webhook and Reconciler to follow (Single Responsibility Principle)
+      
+    why no the webhook directly update the payment_intent table?
+    Edge cases
+    * case 1: The Webhook Arrives berfore the psp call responce arrives
+    * case 2: Reconciler discovers truth before worker persisted state
+    * case 3: Crash mid-update happen the linker will repare 
+
 
 
 
@@ -259,9 +272,11 @@ Data Base Schema
    UNIQUE (psp_name, psp_ref_id) // to support correctness accross multiple PSP's
 
 3)psp_events (Append only)
+   * id
    * psp_name
-   * event_type
+   * psp_event_id
    * raw_payload
+   * recived_at
 
 
 

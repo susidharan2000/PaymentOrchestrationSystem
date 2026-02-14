@@ -19,7 +19,17 @@ func CreatePaymentIntent(paymentDetails domain.PaymentParams) (string, error) {
 		Metadata: map[string]string{
 			"payment_id": paymentDetails.PaymentId,
 		},
+		//for testing only
+		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+			Enabled:        stripe.Bool(true),
+			AllowRedirects: stripe.String("never"),
+		},
+		Confirm:       stripe.Bool(true),
+		PaymentMethod: stripe.String("pm_card_chargeDeclined"), // for fail payment
+		//PaymentMethod: stripe.String("pm_card_visa"), // for the success payment
+
 	}
+	params.SetIdempotencyKey(paymentDetails.PaymentId)
 	pi, err := paymentintent.New(params)
 	if err != nil {
 		return "", err

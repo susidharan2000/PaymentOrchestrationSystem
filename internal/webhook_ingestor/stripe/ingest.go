@@ -39,6 +39,10 @@ func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo Webhook.Webho
 		http.Error(w, "invalid signature", http.StatusBadRequest)
 		return
 	}
+	if string(event.Type) != "payment_intent.succeeded" && string(event.Type) != "payment_intent.payment_failed" {
+		return
+	}
+	log.Printf("evt_id: %s", event.ID)
 	// extract the Payment Intent Details from the event
 	var pi stripe.PaymentIntent
 	raw, err := json.Marshal(event.Data.Object)
@@ -60,16 +64,24 @@ func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo Webhook.Webho
 	paymentDetails.Amount = amount
 	paymentDetails.PspName = "stripe"
 
-	//log.Printf("PiID: %s , PaymentId: %s", piID, paymentID)
+	//Event Log
+	var eventLogDetails Webhook.EventLogDetails
+
+	eventLogDetails.PspEventID = event.ID
+	eventLogDetails.PspName = "stripe"
+	eventLogDetails.PspEventType = string(event.Type)
+	eventLogDetails.RawPayload = raw
+
+	log.Printf("PiID: %s", piID)
 	//update the ledger
 	switch event.Type {
 	case "payment_intent.succeeded":
-		if err := updateWebhookResult(paymentDetails, "CAPTURED", repo); err != nil {
+		if err := updateWebhookResult(paymentDetails, eventLogDetails, "CAPTURED", repo); err != nil {
 			http.Error(w, "ledger write failed", http.StatusInternalServerError)
 			return
 		}
 	case "payment_intent.payment_failed":
-		if err := updateWebhookResult(paymentDetails, "FAILED", repo); err != nil {
+		if err := updateWebhookResult(paymentDetails, eventLogDetails, "FAILED", repo); err != nil {
 			http.Error(w, "ledger write failed", http.StatusInternalServerError)
 			return
 		}
@@ -79,12 +91,12 @@ func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo Webhook.Webho
 	w.WriteHeader(http.StatusOK)
 }
 
-func updateWebhookResult(paymentDetails Webhook.WebhookPaymentDetails, paymentStatus string, repo Webhook.WebhookRepository) error {
-	log.Printf("PiID: %s", paymentDetails)
-	if err := repo.AppendLedger(paymentDetails, paymentStatus); err != nil {
+func updateWebhookResult(paymentDetails Webhook.WebhookPaymentDetails, eventLogDetails Webhook.EventLogDetails, paymentStatus string, repo Webhook.WebhookRepository) error {
+	//process the wehhook
+	if err := repo.ProcessWebhook(paymentDetails, eventLogDetails, paymentStatus); err != nil {
 		log.Println(err)
 		return err
 	}
+	log.Println("Webhook Process Completed")
 	return nil
-	// if the ledger is success full then update the payment_intent (best case)
 }
