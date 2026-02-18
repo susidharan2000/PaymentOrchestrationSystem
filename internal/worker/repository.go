@@ -37,7 +37,7 @@ func (r *repo) ClaimPayment() (domain.PaymentParams, error) {
 		FROM payment.payment_intent
 		WHERE status = 'CREATED'
 		FOR UPDATE SKIP LOCKED
-		LIMIT 1
+		LIMIT 1b
 	)
 	UPDATE payment.payment_intent
 	SET status = 'PROCESSING'

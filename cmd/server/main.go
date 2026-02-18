@@ -8,6 +8,7 @@ import (
 	"github.com/joho/godotenv"
 	internaldb "github.com/susidharan/payment-orchestration-system/internal/database"
 	internalhttp "github.com/susidharan/payment-orchestration-system/internal/http"
+	linker "github.com/susidharan/payment-orchestration-system/internal/linker"
 	paymentIntent "github.com/susidharan/payment-orchestration-system/internal/payment/intent"
 	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
 	Webhook_ingestor "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor"
@@ -31,8 +32,12 @@ func main() {
 	workerRepo := worker.NewWorkerRepository(db)
 	//web hook Repo
 	webhookRepo := Webhook_ingestor.NewWebhookRepository(db)
+	//linker Repo
+	linkerRepo := linker.NewLinkerRepository(db)
 
 	go worker.StartWorkers(workerRepo) //start payment_Worker poll
+
+	go linker.StartLinker(linkerRepo)
 
 	router := internalhttp.NewRouter(paymentRepo, webhookRepo)
 	port := 8080
