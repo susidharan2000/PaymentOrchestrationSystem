@@ -42,10 +42,9 @@ func worker(repo workerRepository) {
 		//log.Println(pspRefID)
 		//update the payment_intent State
 		if err != nil {
-			if err := repo.MarkUnknown(paymentDetails.PaymentId, ""); err != nil {
+			if err := repo.MarkFailed(paymentDetails.PaymentId, pspRefID); err != nil {
 				log.Println(err)
 			}
-
 		} else {
 			if err := repo.MarkUnknown(paymentDetails.PaymentId, pspRefID); err != nil {
 				log.Println(err)

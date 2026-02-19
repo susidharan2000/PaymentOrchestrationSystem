@@ -16,7 +16,7 @@ func StartLinker(repo LinkerRepository) {
 			LinkerWorkerCount = parsed
 		}
 	}
-	// inisiate workers
+	// inisiate the worker
 	for i := 0; i < LinkerWorkerCount; i++ {
 		go worker(repo)
 	}
@@ -31,9 +31,6 @@ func worker(repo LinkerRepository) {
 			time.Sleep(2 * time.Second)
 			continue
 		}
-		if err != nil {
-		}
-
 		if rows == 0 {
 			time.Sleep(2 * time.Second)
 			continue

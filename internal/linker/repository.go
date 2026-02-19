@@ -38,6 +38,7 @@ func (r *repo) linkLedger() (int64, error) {
 	WHERE le.ledger_entry_id = batch.ledger_entry_id;
 	`)
 	if err != nil {
+		//log.Panic(err)
 		return 0, err
 	}
 	rows, err := res.RowsAffected()

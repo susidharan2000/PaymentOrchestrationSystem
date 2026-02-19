@@ -10,6 +10,7 @@ import (
 type workerRepository interface {
 	ClaimPayment() (paymentDetails domain.PaymentParams, err error)
 	MarkUnknown(PaymentId string, pspReferenceID string) error
+	MarkFailed(PaymentId string, pspReferenceID string) error
 }
 
 type repo struct {
@@ -37,7 +38,7 @@ func (r *repo) ClaimPayment() (domain.PaymentParams, error) {
 		FROM payment.payment_intent
 		WHERE status = 'CREATED'
 		FOR UPDATE SKIP LOCKED
-		LIMIT 1b
+		LIMIT 1
 	)
 	UPDATE payment.payment_intent
 	SET status = 'PROCESSING'
@@ -57,6 +58,18 @@ func (r *repo) ClaimPayment() (domain.PaymentParams, error) {
 
 func (r *repo) MarkUnknown(PaymentId string, pspReferenceID string) error {
 	row, err := r.db.Exec(`UPDATE payment.payment_intent SET status = 'UNKNOWN',psp_ref_id = NULLIF($1,'') WHERE payment.payment_intent.payment_id=$2 AND payment.payment_intent.status='PROCESSING'`, pspReferenceID, PaymentId)
+	if err != nil {
+		return err
+	}
+	res, _ := row.RowsAffected()
+	if res == 0 {
+		log.Println("MarkUnknown skipped: state not PROCESSING", PaymentId)
+	}
+	return nil
+}
+
+func (r *repo) MarkFailed(PaymentId string, pspReferenceID string) error {
+	row, err := r.db.Exec(`UPDATE payment.payment_intent SET status = 'FAILED',psp_ref_id = NULLIF($1,'') WHERE payment.payment_intent.payment_id=$2 AND payment.payment_intent.status='PROCESSING'`, pspReferenceID, PaymentId)
 	if err != nil {
 		return err
 	}

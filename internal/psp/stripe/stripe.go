@@ -24,14 +24,19 @@ func CreatePaymentIntent(paymentDetails domain.PaymentParams) (string, error) {
 			Enabled:        stripe.Bool(true),
 			AllowRedirects: stripe.String("never"),
 		},
-		Confirm:       stripe.Bool(true),
-		PaymentMethod: stripe.String("pm_card_chargeDeclined"), // for fail payment
-		//PaymentMethod: stripe.String("pm_card_visa"), // for the success payment
+		Confirm: stripe.Bool(true),
+		//PaymentMethod: stripe.String("pm_card_chargeDeclined"), // for fail payment
+		PaymentMethod: stripe.String("pm_card_visa"), // for the success payment
 
 	}
 	params.SetIdempotencyKey(paymentDetails.PaymentId)
 	pi, err := paymentintent.New(params)
 	if err != nil {
+		if stripeErr, ok := err.(*stripe.Error); ok {
+			if stripeErr.PaymentIntent != nil {
+				return stripeErr.PaymentIntent.ID, err
+			}
+		}
 		return "", err
 	}
 	return pi.ID, nil
