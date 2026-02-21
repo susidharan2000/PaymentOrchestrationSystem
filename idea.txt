@@ -1,5 +1,7 @@
 Payment Processing System
 
+*************************************************** Version 1 ************************************************************
+
 A payment system is a machine that records irreversible money facts exactly once, despite retries, crashes, lies, and reordering.
 
 ******This system guarantees correctness per payment intent.**********
@@ -27,7 +29,17 @@ About the System
    irreversible
    correctness-critical
 
-7)“stuck forever” as acceptable   **I will resolve stuck payments using a timeout policy, not by ledger facts.**
+7)Ledger = list of irreversible money facts
+
+8) - Ledger entries must be created ONLY from:
+     *Webhook events
+     *Reconciliation results
+   - NOT from:
+     *API call return values
+     *Worker assumptions
+     *Timeouts
+
+8)“stuck forever” as acceptable   **I will resolve stuck payments using a timeout policy, not by ledger facts.**
   liveness ≠ correctness
   waiting is safer than guessing
   timeouts are policy, not truth
@@ -215,6 +227,11 @@ Crash Ater presisting in Ledger_Entry Table and before presisting in Payment_Int
 
 5) Projector
 
+*****derive state from ledger and update payment intent*****
+not just copy
+
+
+
 Projector is allowed to move state ONLY in one direction:
 from non-terminal → terminal, based on ledger facts.
 
@@ -226,9 +243,15 @@ PROCESSING / UNKNOWN → CAPTURED / FAILED
                                    ↓
                                    Db (Ledger_Entry Table)
                                    ↓
-                                   ↓ (Update the Payment_Intent Table)
+                                   ↓ (Derive State from  ledger_entries to Payment_Intent Table)
                                    ↓
-                                   Db (Payment_Intent Table)   
+                                   Db (Payment_Intent Table)
+
+Implementation:
+1)Many rows → how to choose one?
+    *You don’t choose.
+    *You combine.
+    *Ledger is additive.
 
 
 6) Linker (Identity Resolver)
@@ -260,11 +283,11 @@ Data Base Schema
     UNIQUE(idempotency_key)
     UNIQUE (psp_ref_id) 
 
-2)ledger_entries (Append only) - frobid DELETE and UPDATE with triggers
+2)ledger_entries (Append only) - frobid DELETE and UPDATE with triggers  
    * ledger_entry_id   Primary Key 
    * entry_type - CAPTURED / FAILED
    * payment_id  REFERENCES  payment_intent(payment_id) (NULLABLE)   - (It will be resolved by the linker later)
-   * amount
+   * amoun
    * currency
    * psp_ref_id 
    * psp_name 
@@ -296,3 +319,17 @@ The system is designed so mistakes are detectable and fixable, not hidden.
           
           
 
+*************************************************** Version 1.1 ************************************************************
+Refund Support (Domain Extension) 
+  * Add REFUND ledger type
+  * Rewrite projector to aggregate math
+  * Add partial refund state
+  * Preserve invariants
+
+*************************************************** Version 2 ************************************************************
+
+Liveness + Infrastructure
+  * Retry policies
+  * Deterministic replay
+  * durable queue (optinal)
+  * metrics - observability (optinal)

@@ -11,6 +11,7 @@ import (
 	linker "github.com/susidharan/payment-orchestration-system/internal/linker"
 	paymentIntent "github.com/susidharan/payment-orchestration-system/internal/payment/intent"
 	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
+	state_projector "github.com/susidharan/payment-orchestration-system/internal/state_projector"
 	Webhook_ingestor "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor"
 	worker "github.com/susidharan/payment-orchestration-system/internal/worker"
 )
@@ -35,9 +36,14 @@ func main() {
 	//linker Repo
 	linkerRepo := linker.NewLinkerRepository(db)
 
+	//Projector Repo
+	projectorRepo := state_projector.NewProjectorRepository(db)
+
 	go worker.StartWorkers(workerRepo) //start payment_Worker poll
 
-	go linker.StartLinker(linkerRepo)
+	go linker.StartLinker(linkerRepo) // start linker_worker poll
+
+	go state_projector.StartProjector(projectorRepo) // start State Projector
 
 	router := internalhttp.NewRouter(paymentRepo, webhookRepo)
 	port := 8080
