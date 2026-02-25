@@ -9,8 +9,7 @@ import (
 
 type workerRepository interface {
 	ClaimPayment() (paymentDetails domain.PaymentParams, err error)
-	MarkUnknown(PaymentId string, pspReferenceID string) error
-	MarkFailed(PaymentId string, pspReferenceID string) error
+	MarkProcessing(PaymentId string, pspReferenceID string) error
 }
 
 type repo struct {
@@ -37,11 +36,13 @@ func (r *repo) ClaimPayment() (domain.PaymentParams, error) {
 		SELECT payment_id
 		FROM payment.payment_intent
 		WHERE status = 'CREATED'
+		AND psp_ref_id IS NULL 
+		AND (claimed_at IS NULL OR claimed_at < now() - interval '30 seconds')
 		FOR UPDATE SKIP LOCKED
 		LIMIT 1
 	)
 	UPDATE payment.payment_intent
-	SET status = 'PROCESSING'
+	SET claimed_at = now()
 	FROM row
 	WHERE payment.payment_intent.payment_id = row.payment_id
 	RETURNING payment.payment_intent.payment_id,payment.payment_intent.amount,payment.payment_intent.currency;
@@ -56,26 +57,20 @@ func (r *repo) ClaimPayment() (domain.PaymentParams, error) {
 	return paymentDetails, nil
 }
 
-func (r *repo) MarkUnknown(PaymentId string, pspReferenceID string) error {
-	row, err := r.db.Exec(`UPDATE payment.payment_intent SET status = 'UNKNOWN',psp_ref_id = NULLIF($1,'') WHERE payment.payment_intent.payment_id=$2 AND payment.payment_intent.status='PROCESSING'`, pspReferenceID, PaymentId)
+func (r *repo) MarkProcessing(PaymentId string, pspReferenceID string) error {
+	row, err := r.db.Exec(`UPDATE payment.payment_intent 
+	SET status = 'PROCESSING',claimed_at = NULL ,psp_ref_id = $1,updated_at = now()
+	WHERE payment.payment_intent.payment_id=$2 
+	AND payment.payment_intent.status='CREATED'
+	AND payment.payment_intent.psp_ref_id IS NULL
+	AND payment.payment_intent.claimed_at IS NOT NULL
+	`, pspReferenceID, PaymentId)
 	if err != nil {
 		return err
 	}
 	res, _ := row.RowsAffected()
 	if res == 0 {
-		log.Println("MarkUnknown skipped: state not PROCESSING", PaymentId)
-	}
-	return nil
-}
-
-func (r *repo) MarkFailed(PaymentId string, pspReferenceID string) error {
-	row, err := r.db.Exec(`UPDATE payment.payment_intent SET status = 'FAILED',psp_ref_id = NULLIF($1,'') WHERE payment.payment_intent.payment_id=$2 AND payment.payment_intent.status='PROCESSING'`, pspReferenceID, PaymentId)
-	if err != nil {
-		return err
-	}
-	res, _ := row.RowsAffected()
-	if res == 0 {
-		log.Println("MarkUnknown skipped: state not PROCESSING", PaymentId)
+		log.Println("state transition skipped — likely already updated", PaymentId)
 	}
 	return nil
 }

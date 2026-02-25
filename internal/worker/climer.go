@@ -11,10 +11,12 @@ import (
 )
 
 func StartWorkers(repo workerRepository) {
-	workerCount := 5 //Default
-	workerCount, err := strconv.Atoi(os.Getenv("WORKER_COUNT"))
-	if err != nil {
-		log.Print(err)
+
+	workerCount := 5 // default
+	if val := os.Getenv("WORKER_COUNT"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			workerCount = parsed
+		}
 	}
 
 	for i := 0; i < workerCount; i++ {
@@ -29,27 +31,25 @@ func worker(repo workerRepository) {
 		if err == sql.ErrNoRows {
 			//sleep fop 2 seconds
 			//log.Println("no work available")
-			time.Sleep(time.Second * 10)
+			time.Sleep(time.Second * 5)
 			continue
 		}
 		if err != nil {
-			log.Println(err)
+			log.Println("claim error:", err)
+			time.Sleep(2 * time.Second)
 			continue
 		}
 		//log.Println(paymentDetails)
 		//call the External PSP
 		pspRefID, err := stripeclient.CreatePaymentIntent(paymentDetails)
+		if err != nil {
+			log.Printf("Error in Worker calling External PSP: %s", err)
+			continue
+		}
 		//log.Println(pspRefID)
 		//update the payment_intent State
-		if err != nil {
-			if err := repo.MarkFailed(paymentDetails.PaymentId, pspRefID); err != nil {
-				log.Println(err)
-			}
-		} else {
-			if err := repo.MarkUnknown(paymentDetails.PaymentId, pspRefID); err != nil {
-				log.Println(err)
-			}
+		if err := repo.MarkProcessing(paymentDetails.PaymentId, pspRefID); err != nil {
+			log.Printf("MarkProcessing error: %v", err)
 		}
-
 	}
 }

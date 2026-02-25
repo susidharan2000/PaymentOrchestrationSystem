@@ -64,20 +64,22 @@ Payment States
 
 Non-Terminal State 
 CREATED
-PROCESSING
-UNKNOWN       means: We do not know the truth yet, but the truth already exists in some ledger.
+PROCESSING  means: We do not know the truth yet, but the truth already exists in some ledger.   
 
 Terminal State 
 CAPTURED
 FAILED
 CANCELLED
+
+DLQ State 
+Manual_review_required
  
 
 Payment state transitions (Payment lifeCycle)
 Situation	                         State transition
 User request	                     CREATED
-Worker claims	                     CREATED → PROCESSING 
-PSP explicit decline	             PROCESSING → FAILED
+Worker claims	                     CREATED (not state change ) (lease the row for perticulare time)
+PSP explicit decline	             CREATED → FAILED
 PSP timeout	                         PROCESSING → UNKNOWN
 Webhook confirms debit	             PROCESSING/UNKNOWN → CAPTURED
 Webhook confirms failure	         UNKNOWN → FAILED
@@ -105,31 +107,31 @@ crash happens After presisting the payment state - (NO PROBLEM) if idempotency i
 2)Worker
           DB (Payment_Intent Table)
           ↓
-          ↓ (CREATED → PROCESSING)
+          ↓ (not state change ) (lease the row for perticulare time)
           ↓
           DB (Payment_Intent Table)
            
           PSP (external call)
           ↓
           ↓
-    ← ← ← ← → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → 
-   ↓                                                                             ↓                                                         ↓
-   ↓                                                                             ↓                                                         ↓
-   ↓                                                                             ↓                                                         ↓
-Scenario A — Explicit decline                                           Scenario B — Unknown                                      Scenario C —(auto-capture case)
-Response is clear ,final and negative                                   Worker gets no definitive answer                          PSP returns success
+    ← ← ← ← → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → 
+   ↓                                                                             ↓                                                         
+   ↓                                                                             ↓ (if the external PSP_Call is made)                                                        
+   ↓                                                                             ↓                                                         
+Scenario A — Explicit decline                                           Scenario B — PROCESSING                                   
+Response is clear ,final and negative                                   Worker gets no definitive answer                          
                                                                                               
-card_declined                                                           Network timeout                                           HTTP 200
-insufficient_funds                                                      PSP server error                                          payment successful
-invalid_card                                                            Connection droppedn                                       charged
+card_declined                                                           Network timeout                                        
+insufficient_funds                                                      PSP server error                                        
+invalid_card                                                            Connection droppedn                                    
 authentication_failed                                                   Worker crashes mid-call
 
-Db State (Payment_Intent Table)                                         Db State (Payment_Intent Table)                            Db State (Payment_Intent Table)
-PROCESSING → FAILED                                                     PROCESSING → UNKNOWN                                       PROCESSING → UNKNOWN
+Db State (Payment_Intent Table)                                         Db State (Payment_Intent Table)                             
+CREATED → FAILED                                                          CREATED → PROCESSING   AND Store the PSP_Intent_id                                    
 
 
 PSP API(Not Trustable)
-  *success case is still marked as UNKNOWN beacuse PSP API is not proof that money moved.
+  *success case is still marked as PROCESSING beacuse PSP API is not proof that money moved.
     The PSP ledger is the source of truth.
     The PSP API response is NOT guaranteed to be based on the ledger.
 
@@ -142,15 +144,17 @@ PSP API(Not Trustable)
     Possibly duplicated
     Possibly wrong if the process crashes
 
+CREATED → no PSP call persisted
+PROCESSING + psp_ref_id NULL → worker in-flight
+PROCESSING + psp_ref_id NOT NULL → PSP call happened
+CAPTURED/FAILED → ledger-derived terminal state
 
 Crash discussion
 
-Crash after CREATED → PROCESSING and before PSP call
-  - No side effect occurred. Payment may remain stuck indefinitely. This is a liveness issue handled by timeout/cancellation policy. Correctness is preserved.
-Crash after PSP call and before persisting PROCESSING → UNKNOWN
- - A PSP side effect may have occurred. Truth exists in the PSP ledger. Webhook or reconciliation can record the ledger fact, and the projector can repair state if it was not updated. Correctness is preserved.
-
-
+Crash after the Worker Lease the payment and before PSP call
+  - No side effect occurred. after lease lease_timeout another worker will retry
+Crash after PSP call and before persisting CREATED → PROCESSING 
+ - A PSP side effect occurred.when the ohter worker retry the the PSP_call return the same PSP_Intent_id if the idempotency_key is enforced
 3)Webhook (push from PSP)
     * Translate PSP ledger facts into YOUR ledger facts exactly once.
     * PSP webhook delivery is best-effort, retried, and effectively at-least-once — but NOT guaranteed forever.
@@ -184,41 +188,87 @@ Crash after Ledger_Entry and before presisting Payment_Intent - reconciliation/P
 Crash before presisting the PSP_Referance - (NO PROBLEM)- correctness does not change because PSP_Referance for log and debugging not correctness 
 
 
-4)Reconciliation (pull from PSP)
+4)Reconciliation (pull-based correctness worker)
 Reconciler is a pull-based correctness worker that resolves uncertainty by querying the PSP ledger and recording the result exactly once.
+
+reconciliation is:
+   * Background repair
+   * Eventually consistent
+   * Not user-facing latency path
+   * You don’t need speed.
+   * You need safety.
 
 Reconciler queries the PSP ledger using the strongest available identifier:
 First: psp_reference (if present)
 Fallback: merchant_payment_id (payment_id, always exists)
 
+Implementation:
+                      [Reconciler Loop]
+                             ↓
+                      Fetch N payments
+         if(count > 0)       ↓            if(count <= 0)
+              ← ← ← ← ← ← ← ← → → → → → → → → →
+              ↓                               ↓
+              ↓                               ↓
+              ↓                               ↓
+  Resolve Paymant(concurrently)             Sleep
+              ↓                               ↓
+              ↓                               ↓
+            repeat                          repeat
 
-                                             Reconciliation
-                                             ↓
-                                             ↓ (Query PSP ledger with PSP_Referance) if PSP_Referance is NULL use the Merchant_Payment_id (Always Exits if the payment is presisted)
-                                             ↓
-                                             PSP Ledger 
 
+Resolve Paymant:
 
-                                            Reconciliation 
+                                        Reconciler 
                                             ↓
                                             ↓
+                                            ↓ (claim the unresolved payment)
+                                            ↓
+                                            ↓
+                                   (Payment_Intent Table)
+                                            ↓
+                                            ↓
+                                            ↓ Query Extrenal psp_Ledger (eg:Stripe) 
+                                            ↓
+                                            ↓
+                                  Extrenal psp_Ledger 
+                                            ↓
+                                            ↓  (append) both tables
                                             ↓
             ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← ← → → → → → → → → → → → → → → 
             ↓                                                                ↓          
             ↓                                                                ↓
             ↓                                                                ↓
-           Db (Ledger_Entry Table)                                      Db(PSP_Referance Table) (Optional)
-           (append-only, idempotent)                                    Presist the PSP responce
-           ↓
-           ↓ (only if ledger entry successful)
-           ↓
-           Db(Payment_Intent Table)
-           Success - (PROCESSING -> CAPTURED)
-           Failed - (PROCESSING -> FAILED)
+           1)Db(PSP_Event Log Table)                                     2)Db (Ledger_Entry Table)
+           Presist the PSP responce                                    (append-only, idempotent)
 
+                              
 
 Correctness is presrved
-Reconciler may leave state stale, but it must never lose or duplicate a ledger fact.          
+Reconciler may leave state stale, but it must never lose or duplicate a ledger fact.
+
+
+(Problem 1)How the unresolved payment are claimed and avoid  duplicate claim ?
+Solution : leasing pattern
+      In a background reconciler that repeatedly processes unresolved payments using LIMIT
+
+      1)Concurrency control (avoid duplicate processing)
+         * Use a lease field like claimed_at.
+         * Eligibility condition:
+         * claimed_at IS NULL OR claimed_at < now() - lease_timeout
+         * This prevents multiple reconciler instances from processing the same row concurrently and ensures crash recovery via lease expiry.
+
+      2)Fairness (avoid starvation)
+         * Use deterministic ordering:
+         * ORDER BY updated_at ASC
+         * Without ORDER BY, repeated LIMIT queries on a persistent backlog can repeatedly return the same rows due to physical scan order, causing other rows to never get processed.
+
+      * claimed_at → infrastructure coordination
+      * updated_at → business freshness & fairness ordering
+
+      * Lease controls visibility.
+      * Ordering controls rotation.
+      * Ledger idempotency guarantees correctness.
 
 Crash discussion:
 Crash before querying the PSP Ledger - (NO PROBLEM) the Reconcilor retry later
@@ -319,14 +369,15 @@ The system is designed so mistakes are detectable and fixable, not hidden.
           
           
 
-*************************************************** Version 1.1 ************************************************************
-Refund Support (Domain Extension) 
-  * Add REFUND ledger type
+*************************************************** Version 2 ************************************************************
+  (Domain Extension) 
+  * Implement the (PSP manual Comformation)
   * Rewrite projector to aggregate math
+  * Add REFUND ledger type
   * Add partial refund state
   * Preserve invariants
 
-*************************************************** Version 2 ************************************************************
+*************************************************** Version 3 ************************************************************
 
 Liveness + Infrastructure
   * Retry policies

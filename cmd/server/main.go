@@ -24,6 +24,9 @@ func main() {
 		log.Print(err)
 	}
 
+	//seed the Jitter
+	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
 	// PSP Init's
 	stripeclient.Init()
 
@@ -35,15 +38,18 @@ func main() {
 	webhookRepo := Webhook_ingestor.NewWebhookRepository(db)
 	//linker Repo
 	linkerRepo := linker.NewLinkerRepository(db)
-
 	//Projector Repo
 	projectorRepo := state_projector.NewProjectorRepository(db)
+	//Reconciler Repository
+	//reconcilerRepo := reconciler.NewReconcilerRepository(db)
 
 	go worker.StartWorkers(workerRepo) //start payment_Worker poll
 
 	go linker.StartLinker(linkerRepo) // start linker_worker poll
 
 	go state_projector.StartProjector(projectorRepo) // start State Projector
+
+	//go reconciler.StartReconciler(reconcilerRepo, r) // start Reconciler
 
 	router := internalhttp.NewRouter(paymentRepo, webhookRepo)
 	port := 8080
