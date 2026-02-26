@@ -8,6 +8,7 @@ import (
 	stripe "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/stripe"
 )
 
+// create payment
 func createPaymentHandler(repo intentService.PaymentRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -15,6 +16,17 @@ func createPaymentHandler(repo intentService.PaymentRepository) http.HandlerFunc
 			return
 		}
 		intentService.CreatePayment(w, r, repo)
+	}
+}
+
+// cancel payment
+func cancelPaymentHandler(repo intentService.PaymentRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		intentService.CancelPayment(w, r, repo)
 	}
 }
 

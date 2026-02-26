@@ -381,6 +381,7 @@ The system is designed so mistakes are detectable and fixable, not hidden.
 
 Liveness + Infrastructure
   * Retry policies
+  * implement the token bucket for the (429 rate limit error) for the reconciler 
   * Deterministic replay
   * durable queue (optinal)
   * metrics - observability (optinal)

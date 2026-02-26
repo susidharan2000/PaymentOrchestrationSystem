@@ -22,7 +22,7 @@ func (r *repo) projectState() error {
 	WHEN EXISTS (SELECT 1 FROM payment.ledger_entries le WHERE p.payment_id = le.payment_id AND le.entry_type = 'FAILED') THEN 'FAILED'
 	ELSE p.status
 	END
-	WHERE p.status IN ('PROCESSING','UNKNOWN')
+	WHERE p.status IN ('PROCESSING')
 	`)
 	if err != nil {
 

@@ -2,11 +2,15 @@ package intent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
@@ -39,8 +43,30 @@ func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepositor
 	//fmt.Println(responce)
 }
 
-//response Writter
+func CancelPayment(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
+	//cancel the payment only if the external psp call not is made because
+	//canceling the payment after the not possible and we handle that in refund
 
+	paymentID := chi.URLParam(r, "id")
+	//log.Println(paymentID)
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second) //set timeout for the request
+	defer cancel()
+
+	err := repo.CancelPayment(ctx, paymentID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusConflict)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"Payment ID": paymentID,
+		"message":    "Payment Cancelled",
+	})
+}
+
+// response Writter
 func ErrorResponse(w http.ResponseWriter, s int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(s)

@@ -1,3 +1,15 @@
+Today Task : * Implement the cancel payment feture for the 
+
+
+
+
+
+
+
+
+
+
+
 To do:
 1)Re-write the worker logic (Re-write the payment_intent table definition)
 2)Complete the reconciler logic and Design the DLQ for the reconciler for manual Inspection

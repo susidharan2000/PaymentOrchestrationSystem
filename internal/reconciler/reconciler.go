@@ -19,8 +19,14 @@ import (
 // wait untill the all queried payment are resolved
 
 func StartReconciler(repo ReconcilerRepository, r *rand.Rand) {
+	batchSize := 1 // default
+	if val := os.Getenv("RECONCILER_BATCH_SIZE"); val != "" {
+		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
+			batchSize = parsed
+		}
+	}
 	wg := sync.WaitGroup{}
-	PaymentChan := make(chan Payment, 10)
+	PaymentChan := make(chan Payment, batchSize)
 	// concurrently Process Payments and update the ledge
 	spanWorkers(repo, &wg, PaymentChan)
 	for {
@@ -46,7 +52,7 @@ func StartReconciler(repo ReconcilerRepository, r *rand.Rand) {
 
 func spanWorkers(repo ReconcilerRepository, wg *sync.WaitGroup, PaymentChan chan Payment) {
 	workerCount := 1 // default
-	if val := os.Getenv("PAYMENT_PROCESSING_WORKER_COUNT"); val != "" {
+	if val := os.Getenv("RECONCILER_CONCURRENCY"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
 			workerCount = parsed
 		}

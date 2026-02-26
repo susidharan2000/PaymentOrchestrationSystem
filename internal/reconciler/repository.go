@@ -24,10 +24,10 @@ func (r *repo) ClaimUnresolvedPayments(limit int64) ([]Payment, error) {
 	WHERE p.payment_id IN (
 		SELECT payment_id
 		FROM payment.payment_intent
-		WHERE status IN ('PROCESSING','UNKNOWN')
+		WHERE status IN ('PROCESSING')
 		  AND (
-			reconciler_claimed_at IS NULL
-			OR reconciler_claimed_at < now() - interval '30 seconds'
+			claimed_at IS NULL
+			OR claimed_at < now() - interval '30 seconds'
 		  )
 		ORDER BY updated_at ASC, payment_id ASC
 		LIMIT $1

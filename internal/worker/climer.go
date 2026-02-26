@@ -12,7 +12,7 @@ import (
 
 func StartWorkers(repo workerRepository) {
 
-	workerCount := 5 // default
+	workerCount := 2 // default
 	if val := os.Getenv("WORKER_COUNT"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
 			workerCount = parsed
