@@ -11,9 +11,9 @@ import (
 func NewRouter(paymenttRepo intentService.PaymentRepository, webhookRepo Webhook_ingestor.WebhookRepository) http.Handler {
 
 	req := chi.NewRouter()
-	req.Post("/payments", createPaymentHandler(paymenttRepo))             // create Payemnt intent -  client
-	req.Post("/payments/{id}/cancel", cancelPaymentHandler(paymenttRepo)) // cancel payment intent - client
-	req.Post("/webhooks/psp/stripe", stripeWebhook(webhookRepo))          // handles stripe webhook
+	req.Post("/payments", createPaymentHandler(paymenttRepo))    // create Payemnt intent -  client
+	req.Post("/webhooks/psp/stripe", stripeWebhook(webhookRepo)) // handles stripe webhook
+	//req.Post("/payments/{id}/cancel", cancelPaymentHandler(paymenttRepo)) // cancel payment intent - client
 
 	return req
 }

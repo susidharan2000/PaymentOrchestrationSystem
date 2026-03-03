@@ -59,6 +59,15 @@ Webhook + reconciliation
 Idempotency
 
 
+**********
+Backend Architecture Summary
+POST /payments → create PI → persist mapping → return client_secret
+Webhook → append ledger
+Projector → update state
+Reconciler → repair
+**********
+
+
 
 Payment States
 
@@ -77,12 +86,12 @@ Manual_review_required
 
 Payment state transitions (Payment lifeCycle)
 Situation	                         State transition
-User request	                     CREATED
-Worker claims	                     CREATED (not state change ) (lease the row for perticulare time)
-PSP explicit decline	             CREATED → FAILED
-PSP timeout	                         PROCESSING → UNKNOWN
-Webhook confirms debit	             PROCESSING/UNKNOWN → CAPTURED
-Webhook confirms failure	         UNKNOWN → FAILED
+User request	                     CREATED -> psp_call -> PROCESSING -> return client_secret
+Webhook confirms debit	           Append Ledger  AS "CAPTURED"
+Webhook confirms failure	         Append Ledger  AS "FAILED"
+Reconciler confirms debit	         Append Ledger  AS "CAPTURED"
+Reconciler confirms failure	       Append Ledger  AS "FAILED"
+StateProjector                     Append Ledger(CAPTURED/FAILED) -> Payment_Intent(CAPTURED/FAILED)
 
 
 Webhook is an optimization, not a dependency.
@@ -94,67 +103,34 @@ Reconciliation = guaranteed truth
 System work Flow
 
 1)User cteate the Payment 
+this the full http payment request lifeCycle
+
          User
           ↓
-          ↓  State (Created)
           ↓
-          DB (Payment_Intent Table)
-
-Crash discussion
-crash happens before presisting the payment state -(NO PROBLEM) client can safly retry beacuse no payment recored exist
-crash happens After presisting the payment state - (NO PROBLEM) if idempotency is used.
-
-2)Worker
-          DB (Payment_Intent Table)
+          DB (Payment_Intent Table) State (CREATED)
           ↓
-          ↓ (not state change ) (lease the row for perticulare time)
           ↓
-          DB (Payment_Intent Table)
-           
           PSP (external call)
           ↓
           ↓
-    ← ← ← ← → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → → 
-   ↓                                                                             ↓                                                         
-   ↓                                                                             ↓ (if the external PSP_Call is made)                                                        
-   ↓                                                                             ↓                                                         
-Scenario A — Explicit decline                                           Scenario B — PROCESSING                                   
-Response is clear ,final and negative                                   Worker gets no definitive answer                          
-                                                                                              
-card_declined                                                           Network timeout                                        
-insufficient_funds                                                      PSP server error                                        
-invalid_card                                                            Connection droppedn                                    
-authentication_failed                                                   Worker crashes mid-call
+          Persist psp_ref_id + move (CREATED -> PROCESSING) then COMMIT
+          ↓
+          ↓
+          Responce (return client_secret)
+          ↓
+          ↓
+          User
 
-Db State (Payment_Intent Table)                                         Db State (Payment_Intent Table)                             
-CREATED → FAILED                                                          CREATED → PROCESSING   AND Store the PSP_Intent_id                                    
-
-
-PSP API(Not Trustable)
-  *success case is still marked as PROCESSING beacuse PSP API is not proof that money moved.
-    The PSP ledger is the source of truth.
-    The PSP API response is NOT guaranteed to be based on the ledger.
-
-  *The API response is:
-    A runtime message
-    Produced by application code
-    Possibly sent before ledger commit
-    Possibly sent after ledger commit
-    Possibly lost
-    Possibly duplicated
-    Possibly wrong if the process crashes
+Crash discussion
+crash happens at any point the user retries 
+no duplicatet money is created - protected via idempotency_key in PSP ,so it is safe to retry 
 
 CREATED → no PSP call persisted
-PROCESSING + psp_ref_id NULL → worker in-flight
 PROCESSING + psp_ref_id NOT NULL → PSP call happened
 CAPTURED/FAILED → ledger-derived terminal state
 
-Crash discussion
 
-Crash after the Worker Lease the payment and before PSP call
-  - No side effect occurred. after lease lease_timeout another worker will retry
-Crash after PSP call and before persisting CREATED → PROCESSING 
- - A PSP side effect occurred.when the ohter worker retry the the PSP_call return the same PSP_Intent_id if the idempotency_key is enforced
 3)Webhook (push from PSP)
     * Translate PSP ledger facts into YOUR ledger facts exactly once.
     * PSP webhook delivery is best-effort, retried, and effectively at-least-once — but NOT guaranteed forever.
@@ -304,52 +280,32 @@ Implementation:
     *Ledger is additive.
 
 
-6) Linker (Identity Resolver)
-    * Attach payment_id to ledger rows where it is NULL.
-    * it query the  payment_intent table and update the (ledger payment_id only)
-    * it allow the webhook and Reconciler to follow (Single Responsibility Principle)
-      
-    why no the webhook directly update the payment_intent table?
-    Edge cases
-    * case 1: The Webhook Arrives berfore the psp call responce arrives
-    * case 2: Reconciler discovers truth before worker persisted state
-    * case 3: Crash mid-update happen the linker will repare 
-
-
-
-
-
 Data Base Schema
 
 1)payment_intent
-    * payment_id - Primary Key 
-    * idempotency_key  
-    * state  - CHECK (CREATED, PROCESSING, UNKNOWN, CAPTURED, FAILED, CANCELLED)
-    * amount
-    * currency
-    * psp_ref_id - NULLABLE
-    * psp_name  
-    * create_at
+    * payment_id - Primary Key  NOT NULL
+    * idempotency_key  NOT NULL
+    * state  - CHECK (CREATED, PROCESSING, CAPTURED, FAILED, CANCELLED) NOT NULL
+    * amount NOT NULL
+    * currency NOT NULL
+    * psp_ref_id - NULL 
+    * psp_name  NOT NULL
+    * request_hash NOT NULL
+    * create_at NOT NULL
+    * claimed_at NULL - reconciler claim
     UNIQUE(idempotency_key)
     UNIQUE (psp_ref_id) 
 
 2)ledger_entries (Append only) - frobid DELETE and UPDATE with triggers  
-   * ledger_entry_id   Primary Key 
+   * ledger_entry_id NOT NULL  Primary Key 
    * entry_type - CAPTURED / FAILED
-   * payment_id  REFERENCES  payment_intent(payment_id) (NULLABLE)   - (It will be resolved by the linker later)
-   * amoun
+   * payment_id  REFERENCES  payment_intent(payment_id)
+   * amount 
    * currency
    * psp_ref_id 
    * psp_name 
    * created_at
    UNIQUE (psp_name, psp_ref_id) // to support correctness accross multiple PSP's
-
-3)psp_events (Append only)
-   * id
-   * psp_name
-   * psp_event_id
-   * raw_payload
-   * recived_at
 
 
 

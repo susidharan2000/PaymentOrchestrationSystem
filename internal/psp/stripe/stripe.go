@@ -12,32 +12,59 @@ func Init() {
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
 }
 
-func CreatePaymentIntent(paymentDetails domain.PaymentParams) (string, error) {
+func CreatePaymentIntent(paymentDetails domain.PaymentParams) (string, string, error) {
+	// Automatic Comformation
+	// params := &stripe.PaymentIntentParams{
+	// 	Amount:   stripe.Int64(paymentDetails.Amount * 100),
+	// 	Currency: stripe.String(paymentDetails.Currency),
+	// 	Metadata: map[string]string{
+	// 		"payment_id": paymentDetails.PaymentId,
+	// 	},
+	// 	//for testing only
+	// 	AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
+	// 		Enabled:        stripe.Bool(true),
+	// 		AllowRedirects: stripe.String("never"),
+	// 	},
+	// 	Confirm: stripe.Bool(true),
+	// 	//PaymentMethod: stripe.String("pm_card_chargeDeclined"), // for fail payment
+	// 	PaymentMethod: stripe.String("pm_card_visa"), // for the success payment
+
+	// }
+
+	// Manual Conformation
 	params := &stripe.PaymentIntentParams{
 		Amount:   stripe.Int64(paymentDetails.Amount * 100),
 		Currency: stripe.String(paymentDetails.Currency),
 		Metadata: map[string]string{
 			"payment_id": paymentDetails.PaymentId,
 		},
-		//for testing only
 		AutomaticPaymentMethods: &stripe.PaymentIntentAutomaticPaymentMethodsParams{
-			Enabled:        stripe.Bool(true),
-			AllowRedirects: stripe.String("never"),
+			Enabled: stripe.Bool(true),
 		},
-		Confirm: stripe.Bool(true),
-		//PaymentMethod: stripe.String("pm_card_chargeDeclined"), // for fail payment
-		PaymentMethod: stripe.String("pm_card_visa"), // for the success payment
-
+		Confirm: stripe.Bool(false),
 	}
+
 	params.SetIdempotencyKey(paymentDetails.PaymentId)
 	pi, err := paymentintent.New(params)
 	if err != nil {
 		if stripeErr, ok := err.(*stripe.Error); ok {
 			if stripeErr.PaymentIntent != nil {
-				return stripeErr.PaymentIntent.ID, err
+				return stripeErr.PaymentIntent.ID, "", err
 			}
 		}
-		return "", err
+		return "", "", err
 	}
-	return pi.ID, nil
+	return pi.ID, pi.ClientSecret, nil
+}
+
+// get the payment intent
+func GetPaymentIntent(psp_ref_id string) (domain.PspIntent, error) {
+	pi, err := paymentintent.Get(psp_ref_id, nil)
+	if err != nil {
+		return domain.PspIntent{}, err
+	}
+	var PspResponce domain.PspIntent
+	PspResponce.ClientSecret = pi.ClientSecret
+	PspResponce.Status = string(pi.Status)
+	return PspResponce, nil
 }

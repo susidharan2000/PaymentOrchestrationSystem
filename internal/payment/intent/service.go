@@ -2,15 +2,16 @@ package intent
 
 import (
 	"bytes"
-	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"log"
 	"net/http"
-	"time"
+	"os"
 
-	"github.com/go-chi/chi/v5"
+	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
 )
 
 func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
@@ -28,42 +29,78 @@ func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepositor
 		ErrorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	//validate the request
 	if err := req.validateRequest(); err != nil {
 		ErrorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	//hash Request
+	var paymentHash PaymentFingerprint
+	paymentHash.Amount = req.Amount
+	paymentHash.Currency = req.Currency
+	paymentHash.PSPName = req.PspName
+	requestHash, err := ComputeRequestHash(paymentHash)
+	if err != nil {
+		message := "HashCode Generation failed"
+		log.Println(message)
+		ErrorResponse(w, http.StatusInternalServerError, message)
+		return
+	}
 	// Create the payment Request
-	id, created, err := repo.PersistPaymentRequest(req)
+	paymentDetails, created, err := repo.PersistPaymentRequest(req, requestHash)
 	if err != nil {
 		log.Print(err)
-		ErrorResponse(w, http.StatusServiceUnavailable, "temporary server error, try again later")
+		switch err.Error() {
+		case "idempotency key reused with different payload":
+			ErrorResponse(w, http.StatusConflict, err.Error())
+		default:
+			ErrorResponse(w, http.StatusInternalServerError, err.Error())
+		}
 		return
 	}
-	SuccessResponse(w, id, req, created)
-	//fmt.Println(responce)
-}
-
-func CancelPayment(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
-	//cancel the payment only if the external psp call not is made because
-	//canceling the payment after the not possible and we handle that in refund
-
-	paymentID := chi.URLParam(r, "id")
-	//log.Println(paymentID)
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second) //set timeout for the request
-	defer cancel()
-
-	err := repo.CancelPayment(ctx, paymentID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusConflict)
-		return
+	//log.Printf("Payment Details:%v", paymentDetails)
+	//call the external PSP
+	var pspRefID string
+	var client_secret string
+	if created {
+		//log.Print("New Payment Created")
+		pspRefID, client_secret, err = stripeclient.CreatePaymentIntent(paymentDetails)
+		if err != nil {
+			//log.Printf("Error in calling External PSP: %s", err)
+			ErrorResponse(w, http.StatusBadGateway, "psp Error")
+			return
+		}
+	} else {
+		//log.Println(paymentDetails.PspRefID)
+		if !paymentDetails.PspRefID.Valid {
+			//log.Print("New Payment Created")
+			pspRefID, client_secret, err = stripeclient.CreatePaymentIntent(paymentDetails)
+			if err != nil {
+				//log.Printf("Error in calling External PSP: %s", err)
+				ErrorResponse(w, http.StatusBadGateway, "psp Error")
+				return
+			}
+		} else {
+			//retry
+			log.Print("retry Happened")
+			pi, err := stripeclient.GetPaymentIntent(paymentDetails.PspRefID.String)
+			if err != nil {
+				//log.Printf("Error in calling External PSP: %s", err)
+				ErrorResponse(w, http.StatusBadGateway, "psp Error")
+				return
+			}
+			SuccessResponse(w, paymentDetails.PaymentId, req, created, pi.ClientSecret, "PROCESSING")
+			return
+		}
 	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"Payment ID": paymentID,
-		"message":    "Payment Cancelled",
-	})
+	//log.Printf("PSP_REFERANCE ID :%s", pspRefID)
+	//log.Printf("PSP_CLIENT : %s", client_secret)
+	//presist payment status to Processing , presist psp_ref_id
+	if err := repo.MarkProcessing(paymentDetails.PaymentId, pspRefID); err != nil {
+		log.Printf("MarkProcessing error: %v", err)
+	}
+	//return client_secret Key in respince
+	SuccessResponse(w, paymentDetails.PaymentId, req, created, client_secret, "PROCESSING")
 }
 
 // response Writter
@@ -74,7 +111,7 @@ func ErrorResponse(w http.ResponseWriter, s int, message string) {
 		"message": message,
 	})
 }
-func SuccessResponse(w http.ResponseWriter, id string, req CreatePaymentRequest, created bool) {
+func SuccessResponse(w http.ResponseWriter, id string, req CreatePaymentRequest, created bool, client_secret string, status string) {
 	w.Header().Set("Content-Type", "application/json")
 	if created {
 		w.WriteHeader(http.StatusCreated)
@@ -86,7 +123,10 @@ func SuccessResponse(w http.ResponseWriter, id string, req CreatePaymentRequest,
 	responce.Amount = req.Amount
 	responce.Currency = req.Currency
 	responce.PspName = req.PspName
-	responce.Status = "CREATED"
+	responce.Status = status
+	responce.ClientSecret = client_secret
+	stripePublishablekey := os.Getenv("STRIPE_PUBLISHABLE_KEY")
+	responce.Publishablekey = stripePublishablekey
 	json.NewEncoder(w).Encode(responce)
 }
 
@@ -106,3 +146,36 @@ func (r CreatePaymentRequest) validateRequest() error {
 	}
 	return nil
 }
+
+func ComputeRequestHash(f PaymentFingerprint) (string, error) {
+	b, err := json.Marshal(f)
+	if err != nil {
+		return "", err
+	}
+
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// func CancelPayment(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
+// 	//cancel the payment only if the external psp call not is made because
+// 	//canceling the payment after the not possible and we handle that in refund
+
+// 	paymentID := chi.URLParam(r, "id")
+// 	//log.Println(paymentID)
+// 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second) //set timeout for the request
+// 	defer cancel()
+
+// 	err := repo.CancelPayment(ctx, paymentID)
+// 	if err != nil {
+// 		http.Error(w, err.Error(), http.StatusConflict)
+// 		return
+// 	}
+
+// 	w.WriteHeader(http.StatusOK)
+// 	w.Header().Set("Content-Type", "application/json")
+// 	json.NewEncoder(w).Encode(map[string]string{
+// 		"Payment ID": paymentID,
+// 		"message":    "Payment Cancelled",
+// 	})
+// }

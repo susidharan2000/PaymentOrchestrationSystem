@@ -10,9 +10,18 @@ type CreatePaymentRequest struct {
 
 // responce to client
 type PaymentDetails struct {
-	PaymentId string `json:"payment_id"`
-	Amount    int64  `json:"amount"`
-	Currency  string `json:"currency"`
-	Status    string `json:"status"`
-	PspName   string `json:"psp_name"`
+	PaymentId      string `json:"payment_id"`
+	Amount         int64  `json:"amount"`
+	Currency       string `json:"currency"`
+	Status         string `json:"status"`
+	PspName        string `json:"psp_name"`
+	ClientSecret   string `json:"client_secret"`
+	Publishablekey string `json:"publishable_key"`
+}
+
+// for hashing the request
+type PaymentFingerprint struct {
+	Amount   int64
+	Currency string
+	PSPName  string
 }

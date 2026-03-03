@@ -8,12 +8,10 @@ import (
 	"github.com/joho/godotenv"
 	internaldb "github.com/susidharan/payment-orchestration-system/internal/database"
 	internalhttp "github.com/susidharan/payment-orchestration-system/internal/http"
-	linker "github.com/susidharan/payment-orchestration-system/internal/linker"
 	paymentIntent "github.com/susidharan/payment-orchestration-system/internal/payment/intent"
 	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
 	state_projector "github.com/susidharan/payment-orchestration-system/internal/state_projector"
 	Webhook_ingestor "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor"
-	worker "github.com/susidharan/payment-orchestration-system/internal/worker"
 )
 
 func main() {
@@ -33,19 +31,15 @@ func main() {
 	// get payment Repo
 	paymentRepo := paymentIntent.NewPaymentRepository(db)
 	// get Worker Repo
-	workerRepo := worker.NewWorkerRepository(db)
+	//workerRepo := worker.NewWorkerRepository(db)
 	//web hook Repo
 	webhookRepo := Webhook_ingestor.NewWebhookRepository(db)
-	//linker Repo
-	linkerRepo := linker.NewLinkerRepository(db)
 	//Projector Repo
 	projectorRepo := state_projector.NewProjectorRepository(db)
 	//Reconciler Repository
 	//reconcilerRepo := reconciler.NewReconcilerRepository(db)
 
-	go worker.StartWorkers(workerRepo) //start payment_Worker poll
-
-	go linker.StartLinker(linkerRepo) // start linker_worker poll
+	//go worker.StartWorkers(workerRepo) //start payment_Worker poll
 
 	go state_projector.StartProjector(projectorRepo) // start State Projector
 

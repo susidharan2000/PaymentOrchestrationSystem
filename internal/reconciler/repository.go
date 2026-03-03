@@ -3,7 +3,8 @@ package reconciler
 import "database/sql"
 
 type ReconcilerRepository interface {
-	ClaimUnresolvedPayments(limit int64) ([]Payment, error)
+	ClaimUnresolvedPayments(limit int) ([]Payment, error)
+	AppendLedgerEntry(payment Payment, paymentStatus string) error
 }
 
 type repo struct {
@@ -14,7 +15,7 @@ func NewReconcilerRepository(db *sql.DB) ReconcilerRepository {
 	return &repo{db: db}
 }
 
-func (r *repo) ClaimUnresolvedPayments(limit int64) ([]Payment, error) {
+func (r *repo) ClaimUnresolvedPayments(limit int) ([]Payment, error) {
 	//implement Lease Claim Pattern to claim payment
 	// - because it avoids the multiple unnessary psp calls
 	// - safe fop multiple reconciler instance
@@ -50,4 +51,26 @@ func (r *repo) ClaimUnresolvedPayments(limit int64) ([]Payment, error) {
 		return nil, err
 	}
 	return Payments, nil
+}
+
+func (r *repo) AppendLedgerEntry(paymentDetails Payment, paymentStatus string) error {
+	isCommited := false
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if !isCommited {
+			tx.Rollback()
+		}
+	}()
+	// Append in the psp_ledger entries
+	if _, err := tx.Exec(`INSERT INTO payment.ledger_entries (entry_type,payment_id,amount,currency,psp_name,psp_ref_id) VALUES ($1,null,$2,$3,$4,$5) ON CONFLICT (psp_name, psp_ref_id) DO NOTHING`, paymentStatus, paymentDetails.Amount, paymentDetails.Currency, paymentDetails.PspName, paymentDetails.PspRefID); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	isCommited = true
+	return nil
 }

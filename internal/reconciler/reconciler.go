@@ -1,12 +1,10 @@
 package reconciler
 
 import (
-	"context"
 	"log"
 	"math/rand"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/stripe/stripe-go/v78"
@@ -25,13 +23,12 @@ func StartReconciler(repo ReconcilerRepository, r *rand.Rand) {
 			batchSize = parsed
 		}
 	}
-	wg := sync.WaitGroup{}
 	PaymentChan := make(chan Payment, batchSize)
 	// concurrently Process Payments and update the ledge
-	spanWorkers(repo, &wg, PaymentChan)
+	spanWorkers(repo, PaymentChan)
 	for {
 
-		Payments, err := repo.ClaimUnresolvedPayments(10)
+		Payments, err := repo.ClaimUnresolvedPayments(batchSize)
 		if err != nil {
 			log.Printf("Reconciler Error: %s", err)
 			return
@@ -43,14 +40,12 @@ func StartReconciler(repo ReconcilerRepository, r *rand.Rand) {
 		}
 		// fill the channel buffer
 		for _, payment := range Payments {
-			wg.Add(1)
 			PaymentChan <- payment
 		}
-		wg.Wait()
 	}
 }
 
-func spanWorkers(repo ReconcilerRepository, wg *sync.WaitGroup, PaymentChan chan Payment) {
+func spanWorkers(repo ReconcilerRepository, PaymentChan chan Payment) {
 	workerCount := 1 // default
 	if val := os.Getenv("RECONCILER_CONCURRENCY"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
@@ -60,18 +55,17 @@ func spanWorkers(repo ReconcilerRepository, wg *sync.WaitGroup, PaymentChan chan
 
 	for i := 0; i < workerCount; i++ {
 		rn := rand.New(rand.NewSource(time.Now().UnixNano()))
-		go processPayment(repo, wg, PaymentChan, rn) //wokers that process payment
+		go processPayment(repo, PaymentChan, rn) //wokers that process payment
 	}
 }
 
-func processPayment(repo ReconcilerRepository, wg *sync.WaitGroup, PaymentChan chan Payment, r *rand.Rand) {
+func processPayment(repo ReconcilerRepository, PaymentChan chan Payment, r *rand.Rand) {
 	for payment := range PaymentChan {
 		func() {
 			defer func() {
 				if rec := recover(); rec != nil {
 					log.Printf("panic: %v", rec)
 				}
-				wg.Done()
 			}()
 			//resolve payment
 			// query the External PSP ledger and update the internal Ledger
@@ -111,7 +105,13 @@ func processPayment(repo ReconcilerRepository, wg *sync.WaitGroup, PaymentChan c
 
 			switch pi.Status {
 			case stripe.PaymentIntentStatusSucceeded:
+				if err := repo.AppendLedgerEntry(payment, "CAPTURED"); err != nil {
+					log.Println(err)
+				}
 			case stripe.PaymentIntentStatusCanceled:
+				if err := repo.AppendLedgerEntry(payment, "FAILED"); err != nil {
+					log.Println(err)
+				}
 			case stripe.PaymentIntentStatusRequiresPaymentMethod:
 			default:
 			}
@@ -120,11 +120,11 @@ func processPayment(repo ReconcilerRepository, wg *sync.WaitGroup, PaymentChan c
 }
 
 func queryStripeByPSPRef(pspRefID string) (*stripe.PaymentIntent, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	//ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	//defer cancel()
 
 	params := &stripe.PaymentIntentParams{}
-	params.Context = ctx
+	//params.Context = ctx
 
 	return paymentintent.Get(pspRefID, params)
 }

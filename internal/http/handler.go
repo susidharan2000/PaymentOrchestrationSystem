@@ -19,17 +19,6 @@ func createPaymentHandler(repo intentService.PaymentRepository) http.HandlerFunc
 	}
 }
 
-// cancel payment
-func cancelPaymentHandler(repo intentService.PaymentRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		intentService.CancelPayment(w, r, repo)
-	}
-}
-
 func stripeWebhook(repo Webhook_ingestor.WebhookRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -39,3 +28,14 @@ func stripeWebhook(repo Webhook_ingestor.WebhookRepository) http.HandlerFunc {
 		stripe.Webhook_ingestor(w, r, repo)
 	}
 }
+
+// cancel payment
+// func cancelPaymentHandler(repo intentService.PaymentRepository) http.HandlerFunc {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+// 		if r.Method != http.MethodPost {
+// 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+// 			return
+// 		}
+// 		intentService.CancelPayment(w, r, repo)
+// 	}
+// }

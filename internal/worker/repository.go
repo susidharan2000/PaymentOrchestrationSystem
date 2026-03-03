@@ -70,7 +70,7 @@ func (r *repo) MarkProcessing(PaymentId string, pspReferenceID string) error {
 	}
 	res, _ := row.RowsAffected()
 	if res == 0 {
-		log.Println("state transition skipped — likely already updated", PaymentId)
+		log.Println("Woker Failed to change the status to PROCESSING", PaymentId)
 	}
 	return nil
 }
