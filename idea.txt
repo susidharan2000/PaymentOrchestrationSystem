@@ -327,17 +327,21 @@ The system is designed so mistakes are detectable and fixable, not hidden.
 
 *************************************************** Version 2 ************************************************************
   (Domain Extension) 
-  * Implement the (PSP manual Comformation)
-  * Rewrite projector to aggregate math
-  * Add REFUND ledger type
-  * Add partial refund state
-  * Preserve invariants
+  * Circute Breaker
+  * Timeouts
+  * backOFF
+  * Retry policy
+  * Redis for Read offLoad
+  * Basic Read replica Thinking
+  * handlaing 100K concurrent users
 
 *************************************************** Version 3 ************************************************************
 
 Liveness + Infrastructure
-  * Retry policies
-  * implement the token bucket for the (429 rate limit error) for the reconciler 
-  * Deterministic replay
-  * durable queue (optinal)
-  * metrics - observability (optinal)
+  * Push insted of polling 
+  * webSocket or polling 
+  * Event Streaming
+  * Redis Pub/Sub
+  * 1M+ concurrent users
+  * Instant success responce 
+  * Reao time update 

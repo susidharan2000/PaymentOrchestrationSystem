@@ -15,6 +15,8 @@ import (
 )
 
 func main() {
+
+	//open DB connection
 	db := internaldb.New()
 	defer db.Close()
 
@@ -50,10 +52,28 @@ func main() {
 	adr := fmt.Sprintf(":%v", port)
 	srv := &http.Server{
 		Addr:    adr,
-		Handler: router,
+		Handler: cors(router),
 	}
 	// start server
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Println("http server error:", err)
 	}
+}
+
+// CORS
+func cors(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		// Important for preflight
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

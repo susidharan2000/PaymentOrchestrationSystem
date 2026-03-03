@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Secure Checkout</title>
+  <script src="https://js.stripe.com/v3/"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f4f6f8;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: white;
+      padding: 30px;
+      width: 420px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+    }
+    input, select, button {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 16px;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+      font-size: 15px;
+    }
+    button {
+      background: #635bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #5548ee;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+
+  <h2 id="title">Make Payment</h2>
+
+  <div id="step1">
+    <input type="number" id="amount" placeholder="Amount (e.g. 1000)" />
+    <select id="currency">
+      <option value="INR">INR</option>
+      <option value="USD">USD</option>
+    </select>
+    <button id="continue">Continue</button>
+  </div>
+
+  <div id="step2" style="display:none;">
+    <form id="payment-form">
+      <div id="payment-element"></div>
+      <button id="pay-btn">Pay</button>
+    </form>
+  </div>
+
+</div>
+
+<script>
+
+function generateIdempotencyKey() {
+  return crypto.randomUUID();
+}
+
+// processing status
+const urlParams = new URLSearchParams(window.location.search);
+const redirectStatus = urlParams.get("redirect_status");
+
+if (redirectStatus) {
+  document.body.innerHTML = "<h2>Processing payment...</h2>";
+}
+
+let stripe;
+let elements;
+let paymentId;
+
+document.getElementById("continue").addEventListener("click", async () => {
+
+  const amount = parseInt(document.getElementById("amount").value);
+  const currency = document.getElementById("currency").value;
+
+  if (!amount || amount <= 0) {
+    alert("Enter valid amount");
+    return;
+  }
+
+  const res = await fetch("http://localhost:8080/payments", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      amount,
+      currency,
+      psp_name: "stripe",
+      idempotency_key: generateIdempotencyKey()
+    })
+  });
+
+  const data = await res.json();
+
+  paymentId = data.payment_id;
+
+  stripe = Stripe(data.publishable_key);
+
+  elements = stripe.elements({
+    clientSecret: data.client_secret,
+    appearance: { theme: "stripe" }
+  });
+
+  elements.create("payment").mount("#payment-element");
+
+  document.getElementById("step1").style.display = "none";
+  document.getElementById("step2").style.display = "block";
+  document.getElementById("title").innerText = "Confirm Payment";
+});
+
+document.getElementById("payment-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  await stripe.confirmPayment({
+    elements,
+    confirmParams: {
+      return_url: window.location.href
+    }
+  });
+
+});
+
+</script>
+
+</body>
+</html>

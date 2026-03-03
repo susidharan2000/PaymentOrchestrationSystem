@@ -26,17 +26,17 @@ func (r *repo) ProcessWebhook(paymentDetails WebhookPaymentDetails, eventLogDeta
 			tx.Rollback()
 		}
 	}()
-	// store the raw psp event
-	if _, err := tx.Exec(`INSERT INTO payment.psp_events (psp_name, psp_event_id, psp_event_type, raw_payload) VALUES ($1, $2, $3, $4) ON CONFLICT (psp_name, psp_event_id) DO NOTHING;`,
-		eventLogDetails.PspName,
-		eventLogDetails.PspEventID,
-		eventLogDetails.PspEventType,
-		eventLogDetails.RawPayload,
-	); err != nil {
-		return err
-	}
 	// Append in the psp_ledger entries
-	if _, err := tx.Exec(`INSERT INTO payment.ledger_entries (entry_type,payment_id,amount,currency,psp_name,psp_ref_id) VALUES ($1,null,$2,$3,$4,$5) ON CONFLICT (psp_name, psp_ref_id) DO NOTHING`, paymentStatus, paymentDetails.Amount, paymentDetails.Currency, paymentDetails.PspName, paymentDetails.PiID); err != nil {
+	// if _, err := tx.Exec(`INSERT INTO payment.ledger_entries (entry_type,payment_id,amount,currency,psp_name,psp_ref_id) VALUES ($1,null,$2,$3,$4,$5) ON CONFLICT (psp_name, psp_ref_id) DO NOTHING`, paymentStatus, paymentDetails.Amount, paymentDetails.Currency, paymentDetails.PspName, paymentDetails.PiID); err != nil {
+	// 	return err
+	// }
+	query := `INSERT INTO payment.ledger_entries (entry_type, payment_id, amount, currency, psp_name, psp_ref_id) SELECT $2, pi.payment_id, $3, $4, $5, $1
+        FROM payment.payment_intent pi
+        WHERE pi.psp_ref_id = $1
+        AND pi.status = 'PROCESSING'
+        ON CONFLICT (psp_name, psp_ref_id) DO NOTHING;
+	`
+	if _, err := tx.Exec(query, paymentDetails.PiID, paymentStatus, paymentDetails.Amount, paymentDetails.Currency, paymentDetails.PspName); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

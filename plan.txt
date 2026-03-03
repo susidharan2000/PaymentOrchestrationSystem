@@ -1,15 +1,7 @@
-Today Task : * Implement the cancel payment feture for the 
+To do Today  :)
+1) Update the webhook_ingestor(append logic) -------done ---------
+   - for now the payment_id is null 
+   - query the payment intent witht the Psp_ref_id and update the internal_ledger
 
+2) implement get payment status end point(for polling)
 
-
-
-
-
-
-
-
-
-
-To do:
-1)Re-write the worker logic (Re-write the payment_intent table definition)
-2)Complete the reconciler logic and Design the DLQ for the reconciler for manual Inspection
