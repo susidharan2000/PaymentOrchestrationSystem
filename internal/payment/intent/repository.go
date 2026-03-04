@@ -12,6 +12,7 @@ import (
 type PaymentRepository interface {
 	PersistPaymentRequest(req CreatePaymentRequest, requestHash string) (paymentDetails domain.PaymentParams, created bool, err error)
 	MarkProcessing(PaymentId string, pspReferenceID string) error
+	getPaymentById(PaymentId string) (PaymentDetailsByID, error)
 	//CancelPayment(ctx context.Context, paymentID string) error
 }
 type repo struct {
@@ -59,6 +60,16 @@ func (r *repo) MarkProcessing(PaymentId string, pspReferenceID string) error {
 		log.Println("Failed to change the status to PROCESSING", PaymentId)
 	}
 	return nil
+}
+
+// get payment By ID
+func (r *repo) getPaymentById(PaymentId string) (PaymentDetailsByID, error) {
+	var PaymentDetails PaymentDetailsByID
+	err := r.db.QueryRow(`SELECT amount,currency,status,psp_name FROM payment.payment_intent WHERE payment_id=$1`, PaymentId).Scan(&PaymentDetails.Amount, &PaymentDetails.Currency, &PaymentDetails.Status, &PaymentDetails.PspName)
+	if err != nil {
+		return PaymentDetailsByID{}, err
+	}
+	return PaymentDetails, err
 }
 
 // cancel payment

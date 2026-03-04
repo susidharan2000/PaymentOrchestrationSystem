@@ -11,9 +11,11 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/go-chi/chi/v5"
 	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
 )
 
+// create the payment
 func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
 
 	bodyBytes, err := io.ReadAll(r.Body)
@@ -101,6 +103,21 @@ func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepositor
 	}
 	//return client_secret Key in respince
 	SuccessResponse(w, paymentDetails.PaymentId, req, created, client_secret, "PROCESSING")
+}
+
+// get payment
+func GetPaymentDetails(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
+	paymentID := chi.URLParam(r, "id")
+	PaymentDetails, err := repo.getPaymentById(paymentID)
+	if err != nil {
+		ErrorResponse(w, http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	//return success responc
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(PaymentDetails)
+
 }
 
 // response Writter

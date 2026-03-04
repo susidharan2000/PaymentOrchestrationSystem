@@ -8,7 +8,7 @@ type CreatePaymentRequest struct {
 	IdempotencyKey string `json:"idempotency_key"`
 }
 
-// responce to client
+// responce to client (create payment)
 type PaymentDetails struct {
 	PaymentId      string `json:"payment_id"`
 	Amount         int64  `json:"amount"`
@@ -24,4 +24,12 @@ type PaymentFingerprint struct {
 	Amount   int64
 	Currency string
 	PSPName  string
+}
+
+// responce ro client (get payment by ID)
+type PaymentDetailsByID struct {
+	Amount   int64  `json:"amount"`
+	Currency string `json:"currency"`
+	Status   string `json:"status"`
+	PspName  string `json:"psp_name"`
 }

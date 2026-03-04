@@ -75,6 +75,53 @@ const redirectStatus = urlParams.get("redirect_status");
 
 if (redirectStatus) {
   document.body.innerHTML = "<h2>Processing payment...</h2>";
+  //start query for the service
+  document.body.innerHTML = "<h2>Processing payment...</h2>";
+
+  const paymentId = localStorage.getItem("payment_id");
+
+  async function pollPaymentStatus() {
+    const startTime = Date.now();
+    let delay = 1000;
+
+    async function poll() {
+
+      const elapsed = Date.now() - startTime;
+
+      if (elapsed > 30000) {
+        document.body.innerHTML = "<h2>⏱ Payment still processing. Please refresh later.</h2>";
+        return;
+      }
+
+      try {
+
+        const res = await fetch(`http://localhost:8080/payments/${paymentId}`);
+        const data = await res.json();
+
+        if (data.status === "CAPTURED") {
+          document.body.innerHTML = "<h2>✅ Payment Successful</h2>";
+          return;
+        }
+
+        if (data.status === "FAILED") {
+          document.body.innerHTML = "<h2>❌ Payment Failed</h2>";
+          return;
+        }
+
+        delay = Math.min(delay * 2, 8000);
+
+      } catch (err) {
+        console.error(err);
+        delay = Math.min(delay * 2, 8000);
+      }
+
+      setTimeout(poll, delay);
+    }
+
+    poll();
+  }
+
+  pollPaymentStatus();
 }
 
 let stripe;
@@ -105,6 +152,7 @@ document.getElementById("continue").addEventListener("click", async () => {
   const data = await res.json();
 
   paymentId = data.payment_id;
+  localStorage.setItem("payment_id", paymentId);
 
   stripe = Stripe(data.publishable_key);
 
