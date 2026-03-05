@@ -3,23 +3,24 @@ package http
 import (
 	"net/http"
 
-	paymentService "github.com/susidharan/payment-orchestration-system/internal/payment/intent/paymentService"
+	paymentIntent "github.com/susidharan/payment-orchestration-system/internal/payment/intent/paymentService"
 	paymentrepo "github.com/susidharan/payment-orchestration-system/internal/payment/intent/payment_repository"
+	"github.com/susidharan/payment-orchestration-system/internal/psp"
 	// Webhook_ingestor "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor"
 	// stripe "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/stripe"
 )
 
 // create payment
-func createPaymentHandler(repo paymentrepo.PaymentRepository) http.HandlerFunc {
+func createPaymentHandler(repo paymentrepo.PaymentRepository, registry *psp.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		paymentService.CreatePayment(w, r, repo)
+		paymentIntent.CreatePayment(w, r, repo, registry)
 	}
 }
 
 // get Payment by ID
 func getPayment(repo paymentrepo.PaymentRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		paymentService.GetPaymentDetails(w, r, repo)
+		paymentIntent.GetPaymentDetails(w, r, repo)
 	}
 }
 

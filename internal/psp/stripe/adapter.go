@@ -8,11 +8,14 @@ import (
 	"github.com/susidharan/payment-orchestration-system/internal/domain"
 )
 
-func Init() {
+type Adapter struct{}
+
+func NewAdapter() *Adapter {
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
+	return &Adapter{}
 }
 
-func CreatePaymentIntent(paymentDetails domain.PaymentParams) (string, string, error) {
+func (a *Adapter) CreatePaymentIntent(paymentDetails domain.PaymentParams) (string, string, error) {
 	// Automatic Comformation
 	// params := &stripe.PaymentIntentParams{
 	// 	Amount:   stripe.Int64(paymentDetails.Amount * 100),
@@ -57,14 +60,16 @@ func CreatePaymentIntent(paymentDetails domain.PaymentParams) (string, string, e
 	return pi.ID, pi.ClientSecret, nil
 }
 
-// get the payment intent
-func GetPaymentIntent(psp_ref_id string) (domain.PspIntent, error) {
-	pi, err := paymentintent.Get(psp_ref_id, nil)
+func (a *Adapter) GetPaymentIntent(pspRefID string) (domain.PspIntent, error) {
+
+	pi, err := paymentintent.Get(pspRefID, nil)
 	if err != nil {
 		return domain.PspIntent{}, err
 	}
-	var PspResponce domain.PspIntent
-	PspResponce.ClientSecret = pi.ClientSecret
-	PspResponce.Status = string(pi.Status)
-	return PspResponce, nil
+
+	var response domain.PspIntent
+	response.ClientSecret = pi.ClientSecret
+	response.Status = string(pi.Status)
+
+	return response, nil
 }

@@ -11,27 +11,29 @@ import (
 	internaldb "github.com/susidharan/payment-orchestration-system/internal/database"
 	internalhttp "github.com/susidharan/payment-orchestration-system/internal/http"
 	paymentrepo "github.com/susidharan/payment-orchestration-system/internal/payment/intent/payment_repository"
-	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
+	psp "github.com/susidharan/payment-orchestration-system/internal/psp"
+	stripePSP "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
 	reconciler "github.com/susidharan/payment-orchestration-system/internal/reconciler"
 	state_projector "github.com/susidharan/payment-orchestration-system/internal/state_projector"
 	Webhook_ingestor "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor"
 )
 
 func main() {
+	//load env
+	if err := godotenv.Load(); err != nil {
+		log.Print(err)
+	}
 
 	//open DB connection
 	db := internaldb.New()
 	defer db.Close()
 
-	if err := godotenv.Load(); err != nil {
-		log.Print(err)
-	}
-
 	//seed the Jitter
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	// PSP Init's
-	stripeclient.Init()
+	// Psp registry
+	registry := psp.NewRegistry()
+	registry.Register("stripe", stripePSP.NewAdapter())
 
 	// get payment Repo
 	paymentRepo := paymentrepo.NewPaymentRepository(db)
@@ -50,7 +52,7 @@ func main() {
 
 	go reconciler.StartReconciler(reconcilerRepo, r) // start Reconciler
 
-	router := internalhttp.NewRouter(paymentRepo, webhookRepo)
+	router := internalhttp.NewRouter(paymentRepo, webhookRepo, registry)
 	port := 8080
 	adr := fmt.Sprintf(":%v", port)
 	srv := &http.Server{

@@ -14,10 +14,11 @@ import (
 	model "github.com/susidharan/payment-orchestration-system/internal/payment/intent/model"
 	Repository "github.com/susidharan/payment-orchestration-system/internal/payment/intent/payment_repository"
 	stripe_handler "github.com/susidharan/payment-orchestration-system/internal/payment/intent/stripe_handler"
+	"github.com/susidharan/payment-orchestration-system/internal/psp"
 )
 
 // create the payment
-func CreatePayment(w http.ResponseWriter, r *http.Request, repo Repository.PaymentRepository) {
+func CreatePayment(w http.ResponseWriter, r *http.Request, repo Repository.PaymentRepository, registry *psp.Registry) {
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
@@ -65,7 +66,7 @@ func CreatePayment(w http.ResponseWriter, r *http.Request, repo Repository.Payme
 	//call the external PSP
 	switch req.PspName {
 	case "stripe":
-		stripe_handler.HandleStripePayment(w, paymentDetails, created, repo)
+		stripe_handler.HandleStripePayment(w, paymentDetails, created, repo, registry)
 	}
 }
 

@@ -9,16 +9,21 @@ import (
 	"github.com/susidharan/payment-orchestration-system/internal/domain"
 	model "github.com/susidharan/payment-orchestration-system/internal/payment/intent/model"
 	Repository "github.com/susidharan/payment-orchestration-system/internal/payment/intent/payment_repository"
-	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
+	"github.com/susidharan/payment-orchestration-system/internal/psp"
 )
 
-func HandleStripePayment(w http.ResponseWriter, paymentDetails domain.PaymentParams, created bool, repo Repository.PaymentRepository) {
+func HandleStripePayment(w http.ResponseWriter, paymentDetails domain.PaymentParams, created bool, repo Repository.PaymentRepository, registry *psp.Registry) {
 	var pspRefID string
 	var client_secret string
 	var err error
+	pspProvider, ok := registry.Get(paymentDetails.PspName)
+	if !ok {
+		ErrorResponse(w, http.StatusBadRequest, "invalid PSP")
+		return
+	}
 	if created {
 		//log.Print("New Payment Created")
-		pspRefID, client_secret, err = stripeclient.CreatePaymentIntent(paymentDetails)
+		pspRefID, client_secret, err = pspProvider.CreatePaymentIntent(paymentDetails)
 		if err != nil {
 			//log.Printf("Error in calling External PSP: %s", err)
 			ErrorResponse(w, http.StatusBadGateway, "psp Error")
@@ -28,16 +33,16 @@ func HandleStripePayment(w http.ResponseWriter, paymentDetails domain.PaymentPar
 		//log.Println(paymentDetails.PspRefID)
 		if !paymentDetails.PspRefID.Valid {
 			//log.Print("New Payment Created")
-			pspRefID, client_secret, err = stripeclient.CreatePaymentIntent(paymentDetails)
+			pspRefID, client_secret, err = pspProvider.CreatePaymentIntent(paymentDetails)
 			if err != nil {
-				//log.Printf("Error in calling External PSP: %s", err)
+				//log.Printf("Error in calling external PSP: %s", err)
 				ErrorResponse(w, http.StatusBadGateway, "psp Error")
 				return
 			}
 		} else {
 			//retry
 			log.Print("retry Happened")
-			pi, err := stripeclient.GetPaymentIntent(paymentDetails.PspRefID.String)
+			pi, err := pspProvider.GetPaymentIntent(paymentDetails.PspRefID.String)
 			if err != nil {
 				//log.Printf("Error in calling External PSP: %s", err)
 				ErrorResponse(w, http.StatusBadGateway, "psp Error")
