@@ -9,14 +9,15 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/go-chi/chi/v5"
-	stripeclient "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
+	model "github.com/susidharan/payment-orchestration-system/internal/payment/intent/model"
+	Repository "github.com/susidharan/payment-orchestration-system/internal/payment/intent/payment_repository"
+	stripe_handler "github.com/susidharan/payment-orchestration-system/internal/payment/intent/stripe_handler"
 )
 
 // create the payment
-func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
+func CreatePayment(w http.ResponseWriter, r *http.Request, repo Repository.PaymentRepository) {
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
@@ -24,7 +25,7 @@ func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepositor
 		ErrorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	var req CreatePaymentRequest
+	var req model.CreatePaymentRequest
 	jsonData := json.NewDecoder(bytes.NewReader(bodyBytes))
 	jsonData.DisallowUnknownFields()
 	if err := jsonData.Decode(&req); err != nil {
@@ -32,12 +33,12 @@ func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepositor
 		return
 	}
 	//validate the request
-	if err := req.validateRequest(); err != nil {
+	if err := validateRequest(req); err != nil {
 		ErrorResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	//hash Request
-	var paymentHash PaymentFingerprint
+	var paymentHash model.PaymentFingerprint
 	paymentHash.Amount = req.Amount
 	paymentHash.Currency = req.Currency
 	paymentHash.PSPName = req.PspName
@@ -62,58 +63,21 @@ func CreatePayment(w http.ResponseWriter, r *http.Request, repo PaymentRepositor
 	}
 	//log.Printf("Payment Details:%v", paymentDetails)
 	//call the external PSP
-	var pspRefID string
-	var client_secret string
-	if created {
-		//log.Print("New Payment Created")
-		pspRefID, client_secret, err = stripeclient.CreatePaymentIntent(paymentDetails)
-		if err != nil {
-			//log.Printf("Error in calling External PSP: %s", err)
-			ErrorResponse(w, http.StatusBadGateway, "psp Error")
-			return
-		}
-	} else {
-		//log.Println(paymentDetails.PspRefID)
-		if !paymentDetails.PspRefID.Valid {
-			//log.Print("New Payment Created")
-			pspRefID, client_secret, err = stripeclient.CreatePaymentIntent(paymentDetails)
-			if err != nil {
-				//log.Printf("Error in calling External PSP: %s", err)
-				ErrorResponse(w, http.StatusBadGateway, "psp Error")
-				return
-			}
-		} else {
-			//retry
-			log.Print("retry Happened")
-			pi, err := stripeclient.GetPaymentIntent(paymentDetails.PspRefID.String)
-			if err != nil {
-				//log.Printf("Error in calling External PSP: %s", err)
-				ErrorResponse(w, http.StatusBadGateway, "psp Error")
-				return
-			}
-			SuccessResponse(w, paymentDetails.PaymentId, req, created, pi.ClientSecret, "PROCESSING")
-			return
-		}
+	switch req.PspName {
+	case "stripe":
+		stripe_handler.HandleStripePayment(w, paymentDetails, created, repo)
 	}
-	//log.Printf("PSP_REFERANCE ID :%s", pspRefID)
-	//log.Printf("PSP_CLIENT : %s", client_secret)
-	//presist payment status to Processing , presist psp_ref_id
-	if err := repo.MarkProcessing(paymentDetails.PaymentId, pspRefID); err != nil {
-		log.Printf("MarkProcessing error: %v", err)
-	}
-	//return client_secret Key in respince
-	SuccessResponse(w, paymentDetails.PaymentId, req, created, client_secret, "PROCESSING")
 }
 
 // get payment
-func GetPaymentDetails(w http.ResponseWriter, r *http.Request, repo PaymentRepository) {
+func GetPaymentDetails(w http.ResponseWriter, r *http.Request, repo Repository.PaymentRepository) {
 	paymentID := chi.URLParam(r, "id")
-	PaymentDetails, err := repo.getPaymentById(paymentID)
+	PaymentDetails, err := repo.GetPaymentById(paymentID)
 	if err != nil {
 		ErrorResponse(w, http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
-	//return success responc
+	//return success response
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(PaymentDetails)
@@ -128,27 +92,9 @@ func ErrorResponse(w http.ResponseWriter, s int, message string) {
 		"message": message,
 	})
 }
-func SuccessResponse(w http.ResponseWriter, id string, req CreatePaymentRequest, created bool, client_secret string, status string) {
-	w.Header().Set("Content-Type", "application/json")
-	if created {
-		w.WriteHeader(http.StatusCreated)
-	} else {
-		w.WriteHeader(http.StatusOK)
-	}
-	var responce PaymentDetails
-	responce.PaymentId = id
-	responce.Amount = req.Amount
-	responce.Currency = req.Currency
-	responce.PspName = req.PspName
-	responce.Status = status
-	responce.ClientSecret = client_secret
-	stripePublishablekey := os.Getenv("STRIPE_PUBLISHABLE_KEY")
-	responce.Publishablekey = stripePublishablekey
-	json.NewEncoder(w).Encode(responce)
-}
 
 // validate the request
-func (r CreatePaymentRequest) validateRequest() error {
+func validateRequest(r model.CreatePaymentRequest) error {
 	if r.Amount <= 0 {
 		return errors.New("invalid amount")
 	}
@@ -164,7 +110,7 @@ func (r CreatePaymentRequest) validateRequest() error {
 	return nil
 }
 
-func ComputeRequestHash(f PaymentFingerprint) (string, error) {
+func ComputeRequestHash(f model.PaymentFingerprint) (string, error) {
 	b, err := json.Marshal(f)
 	if err != nil {
 		return "", err

@@ -35,7 +35,7 @@ func StartReconciler(repo ReconcilerRepository, r *rand.Rand) {
 		}
 		log.Println(len(Payments))
 		if len(Payments) == 0 {
-			time.Sleep(5*time.Second + time.Duration(r.Intn(500))*time.Millisecond)
+			time.Sleep(3*time.Second + time.Duration(r.Intn(500))*time.Millisecond)
 			continue
 		}
 		// fill the channel buffer
@@ -102,7 +102,7 @@ func processPayment(repo ReconcilerRepository, PaymentChan chan Payment, r *rand
 				log.Println("stripe returned nil payment intent")
 				return
 			}
-
+			log.Println(pi.Status)
 			switch pi.Status {
 			case stripe.PaymentIntentStatusSucceeded:
 				if err := repo.AppendLedgerEntry(payment, "CAPTURED"); err != nil {
@@ -112,7 +112,6 @@ func processPayment(repo ReconcilerRepository, PaymentChan chan Payment, r *rand
 				if err := repo.AppendLedgerEntry(payment, "FAILED"); err != nil {
 					log.Println(err)
 				}
-			case stripe.PaymentIntentStatusRequiresPaymentMethod:
 			default:
 			}
 		}()

@@ -7,6 +7,7 @@ type PaymentParams struct {
 	Amount    int64
 	Currency  string
 	PspRefID  sql.NullString
+	PspName   string
 }
 
 type PspIntent struct {

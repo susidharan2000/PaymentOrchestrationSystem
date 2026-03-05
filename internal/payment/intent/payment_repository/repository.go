@@ -7,12 +7,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/susidharan/payment-orchestration-system/internal/domain"
+
+	///Users/susidharan/Go Developmant/PaymentOrchestrationSystem/internal/payment/intent/model
+	model "github.com/susidharan/payment-orchestration-system/internal/payment/intent/model"
 )
 
 type PaymentRepository interface {
-	PersistPaymentRequest(req CreatePaymentRequest, requestHash string) (paymentDetails domain.PaymentParams, created bool, err error)
+	PersistPaymentRequest(req model.CreatePaymentRequest, requestHash string) (paymentDetails domain.PaymentParams, created bool, err error)
 	MarkProcessing(PaymentId string, pspReferenceID string) error
-	getPaymentById(PaymentId string) (PaymentDetailsByID, error)
+	GetPaymentById(PaymentId string) (model.PaymentDetailsByID, error)
 	//CancelPayment(ctx context.Context, paymentID string) error
 }
 type repo struct {
@@ -24,7 +27,7 @@ func NewPaymentRepository(db *sql.DB) PaymentRepository {
 }
 
 // create payment request
-func (r *repo) PersistPaymentRequest(req CreatePaymentRequest, requestHash string) (domain.PaymentParams, bool, error) {
+func (r *repo) PersistPaymentRequest(req model.CreatePaymentRequest, requestHash string) (domain.PaymentParams, bool, error) {
 	paymentId := generatePaymentID()
 	var paymentDetails domain.PaymentParams
 	var existingHash string
@@ -34,7 +37,7 @@ func (r *repo) PersistPaymentRequest(req CreatePaymentRequest, requestHash strin
 	DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
 	RETURNING payment_id,amount,currency,request_hash,psp_ref_id,(xmax = 0) AS created;`
 	err := r.db.QueryRow(query, paymentId, req.IdempotencyKey, req.Amount, req.Currency, req.PspName, requestHash).Scan(&paymentDetails.PaymentId, &paymentDetails.Amount, &paymentDetails.Currency, &existingHash, &paymentDetails.PspRefID, &created)
-
+	paymentDetails.PspName = req.PspName
 	if err != nil {
 		return domain.PaymentParams{}, created, err
 	}
@@ -63,11 +66,11 @@ func (r *repo) MarkProcessing(PaymentId string, pspReferenceID string) error {
 }
 
 // get payment By ID
-func (r *repo) getPaymentById(PaymentId string) (PaymentDetailsByID, error) {
-	var PaymentDetails PaymentDetailsByID
+func (r *repo) GetPaymentById(PaymentId string) (model.PaymentDetailsByID, error) {
+	var PaymentDetails model.PaymentDetailsByID
 	err := r.db.QueryRow(`SELECT amount,currency,status,psp_name FROM payment.payment_intent WHERE payment_id=$1`, PaymentId).Scan(&PaymentDetails.Amount, &PaymentDetails.Currency, &PaymentDetails.Status, &PaymentDetails.PspName)
 	if err != nil {
-		return PaymentDetailsByID{}, err
+		return model.PaymentDetailsByID{}, err
 	}
 	return PaymentDetails, err
 }

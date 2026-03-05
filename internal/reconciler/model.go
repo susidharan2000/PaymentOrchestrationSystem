@@ -1,6 +1,9 @@
 package reconciler
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Payment struct {
 	PaymentId string
@@ -9,6 +12,7 @@ type Payment struct {
 	Currency  string
 	PspName   string
 	PspRefID  *string
+	CreatedAt time.Time
 }
 
 type EventLogDetails struct {

@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS  payment.payment_intent(
 		payment_id UUID PRIMARY KEY,
 		idempotency_key TEXT NOT NULL,
 		status TEXT NOT NULL CHECK (
-			status IN ('CREATED', 'PROCESSING', 'CAPTURED', 'FAILED', 'CANCELLED')
+			status IN ('CREATED', 'PROCESSING', 'CAPTURED', 'FAILED', 'CANCELLED', 'EXPIRED')
 		),
 		amount BIGINT NOT NULL CHECK (amount > 0),
 		currency TEXT NOT NULL CHECK (char_length(currency) = 3),
