@@ -9,10 +9,11 @@ import (
 
 	"github.com/stripe/stripe-go/v76"
 	"github.com/stripe/stripe-go/v76/webhook"
-	Webhook "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor"
+	model "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/model"
+	WebhookRepo "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/webhook_repository"
 )
 
-func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo Webhook.WebhookRepository) {
+func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo WebhookRepo.WebhookRepository) {
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
@@ -57,31 +58,23 @@ func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo Webhook.Webho
 	currency := pi.Currency
 	amount := pi.Amount
 
-	var paymentDetails Webhook.WebhookPaymentDetails
+	var paymentDetails model.WebhookPaymentDetails
 
 	paymentDetails.PiID = piID
 	paymentDetails.Currency = string(currency)
 	paymentDetails.Amount = amount
 	paymentDetails.PspName = "stripe"
 
-	//Event Log
-	var eventLogDetails Webhook.EventLogDetails
-
-	eventLogDetails.PspEventID = event.ID
-	eventLogDetails.PspName = "stripe"
-	eventLogDetails.PspEventType = string(event.Type)
-	eventLogDetails.RawPayload = raw
-
 	log.Printf("PiID: %s", piID)
 	//update the ledger
 	switch event.Type {
 	case "payment_intent.succeeded":
-		if err := updateWebhookResult(paymentDetails, eventLogDetails, "CAPTURED", repo); err != nil {
+		if err := updateWebhookResult(paymentDetails, "CAPTURED", repo); err != nil {
 			http.Error(w, "ledger write failed", http.StatusInternalServerError)
 			return
 		}
 	case "payment_intent.payment_failed":
-		if err := updateWebhookResult(paymentDetails, eventLogDetails, "FAILED", repo); err != nil {
+		if err := updateWebhookResult(paymentDetails, "FAILED", repo); err != nil {
 			http.Error(w, "ledger write failed", http.StatusInternalServerError)
 			return
 		}
@@ -91,9 +84,9 @@ func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo Webhook.Webho
 	w.WriteHeader(http.StatusOK)
 }
 
-func updateWebhookResult(paymentDetails Webhook.WebhookPaymentDetails, eventLogDetails Webhook.EventLogDetails, paymentStatus string, repo Webhook.WebhookRepository) error {
+func updateWebhookResult(paymentDetails model.WebhookPaymentDetails, paymentStatus string, repo WebhookRepo.WebhookRepository) error {
 	//process the wehhook
-	if err := repo.ProcessWebhook(paymentDetails, eventLogDetails, paymentStatus); err != nil {
+	if err := repo.ProcessWebhook(paymentDetails, paymentStatus); err != nil {
 		log.Println(err)
 		return err
 	}

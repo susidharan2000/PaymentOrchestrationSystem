@@ -6,8 +6,8 @@ import (
 	paymentIntent "github.com/susidharan/payment-orchestration-system/internal/payment/intent/paymentService"
 	paymentrepo "github.com/susidharan/payment-orchestration-system/internal/payment/intent/payment_repository"
 	"github.com/susidharan/payment-orchestration-system/internal/psp"
-	// Webhook_ingestor "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor"
-	// stripe "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/stripe"
+	Webhook_Repo "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/webhook_repository"
+	Webhook_ingestor "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/webhook_router"
 )
 
 // create payment
@@ -25,11 +25,11 @@ func getPayment(repo paymentrepo.PaymentRepository) http.HandlerFunc {
 }
 
 // webhook handler
-// func stripeWebhook(repo Webhook_ingestor.WebhookRepository) http.HandlerFunc {
-// 	return func(w http.ResponseWriter, r *http.Request) {
-// 		stripe.Webhook_ingestor(w, r, repo)
-// 	}
-// }
+func WebhookHandler(repo Webhook_Repo.WebhookRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		Webhook_ingestor.WebhookRouter(w, r, repo)
+	}
+}
 
 // cancel payment
 // func cancelPaymentHandler(repo intentService.PaymentRepository) http.HandlerFunc {

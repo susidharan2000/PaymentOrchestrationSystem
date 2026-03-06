@@ -157,7 +157,7 @@ document.getElementById("continue").addEventListener("click", async () => {
   stripe = Stripe(data.publishable_key);
 
   elements = stripe.elements({
-    clientSecret: data.client_secret,
+    clientSecret: data.client_token,
     appearance: { theme: "stripe" }
   });
 

@@ -22,7 +22,7 @@ type PaymentDetails struct {
 	Currency       string `json:"currency"`
 	Status         string `json:"status"`
 	PspName        string `json:"psp_name"`
-	ClientSecret   string `json:"client_secret"`
+	ClientToken    string `json:"client_token"`
 	Publishablekey string `json:"publishable_key"`
 }
 

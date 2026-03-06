@@ -83,7 +83,7 @@ func SuccessResponse(w http.ResponseWriter, id string, paymentDetails domain.Pay
 	responce.Currency = paymentDetails.Currency
 	responce.PspName = paymentDetails.PspName
 	responce.Status = status
-	responce.ClientSecret = client_secret
+	responce.ClientToken = client_secret
 	stripePublishablekey := os.Getenv("STRIPE_PUBLISHABLE_KEY")
 	responce.Publishablekey = stripePublishablekey
 	json.NewEncoder(w).Encode(responce)

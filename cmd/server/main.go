@@ -3,9 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
-	"time"
 
 	"github.com/joho/godotenv"
 	internaldb "github.com/susidharan/payment-orchestration-system/internal/database"
@@ -13,9 +11,8 @@ import (
 	paymentrepo "github.com/susidharan/payment-orchestration-system/internal/payment/intent/payment_repository"
 	psp "github.com/susidharan/payment-orchestration-system/internal/psp"
 	stripePSP "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
-	reconciler "github.com/susidharan/payment-orchestration-system/internal/reconciler"
 	state_projector "github.com/susidharan/payment-orchestration-system/internal/state_projector"
-	Webhook_ingestor "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor"
+	Webhook_Repo "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/webhook_repository"
 )
 
 func main() {
@@ -29,7 +26,7 @@ func main() {
 	defer db.Close()
 
 	//seed the Jitter
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// Psp registry
 	registry := psp.NewRegistry()
@@ -40,17 +37,17 @@ func main() {
 	// get Worker Repo
 	//workerRepo := worker.NewWorkerRepository(db)
 	//web hook Repo
-	webhookRepo := Webhook_ingestor.NewWebhookRepository(db)
+	webhookRepo := Webhook_Repo.NewWebhookRepository(db)
 	//Projector Repo
 	projectorRepo := state_projector.NewProjectorRepository(db)
 	//Reconciler Repository
-	reconcilerRepo := reconciler.NewReconcilerRepository(db)
+	//reconcilerRepo := reconciler.NewReconcilerRepository(db)
 
 	//go worker.StartWorkers(workerRepo) //start payment_Worker poll
 
 	go state_projector.StartProjector(projectorRepo) // start State Projector
 
-	go reconciler.StartReconciler(reconcilerRepo, r) // start Reconciler
+	//go reconciler.StartReconciler(reconcilerRepo, r) // start Reconciler
 
 	router := internalhttp.NewRouter(paymentRepo, webhookRepo, registry)
 	port := 8080
