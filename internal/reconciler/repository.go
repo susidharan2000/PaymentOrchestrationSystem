@@ -19,21 +19,34 @@ func (r *repo) ClaimUnresolvedPayments(limit int) ([]Payment, error) {
 	//implement Lease Claim Pattern to claim payment
 	// - because it avoids the multiple unnessary psp calls
 	// - safe fop multiple reconciler instance
-	Payments := make([]Payment, 0, 10)
+	payments := make([]Payment, 0, limit)
 	query := `WITH rows AS(
-		SELECT payment_id 
+		SELECT payment_id
 		FROM payment.payment_intent
 		WHERE status IN ('PROCESSING') AND 
 		(
-			claimed_at IS NULL OR
-			claimed_at < now() - interval '30 seconds'
+			next_reconcile_at <= now()
 		)
-		ORDER BY updated_at ASC, payment_id ASC
+		ORDER BY next_reconcile_at ASC, payment_id ASC
 		FOR UPDATE SKIP LOCKED
 		LIMIT $1
 		)
 		UPDATE payment.payment_intent p
-		SET claimed_at = now()
+		SET reconcile_attempts = reconcile_attempts+1,
+		updated_at = now(),
+		next_reconcile_at = 
+		    CASE
+                WHEN now() - p.created_at < interval '5 minutes'
+                    THEN now() + interval '30 seconds'
+
+                WHEN now() - p.created_at < interval '30 minutes'
+                    THEN now() + interval '2 minutes'
+
+                WHEN now() - p.created_at < interval '2 hours'
+                    THEN now() + interval '10 minutes'
+					
+                ELSE now() + interval '1 hour'
+            END
 		FROM rows
 		WHERE p.payment_id = rows.payment_id
 		RETURNING p.payment_id, p.status, p.amount, p.currency, p.psp_name, p.psp_ref_id, p.created_at;
@@ -49,12 +62,12 @@ func (r *repo) ClaimUnresolvedPayments(limit int) ([]Payment, error) {
 		if err != nil {
 			return nil, err
 		}
-		Payments = append(Payments, payment)
+		payments = append(payments, payment)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return Payments, nil
+	return payments, nil
 }
 
 func (r *repo) AppendLedgerEntry(paymentDetails Payment, paymentStatus string) error {

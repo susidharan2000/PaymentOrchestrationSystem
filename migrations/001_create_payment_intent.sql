@@ -11,10 +11,12 @@ CREATE TABLE IF NOT EXISTS  payment.payment_intent(
         request_hash TEXT NOT NULL,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-		claimed_at TIMESTAMPTZ NULL,
+
+        reconcile_attempts INT DEFAULT 0,
+        next_reconcile_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_reconcile_error TEXT NULL,
 
         CONSTRAINT uniq_idempotency UNIQUE (idempotency_key),
-        CONSTRAINT uniq_psp_reference UNIQUE (psp_name, psp_ref_id),
 
 		CONSTRAINT payment_state_psp_consistency
         CHECK (
@@ -38,3 +40,13 @@ CREATE TABLE IF NOT EXISTS  payment.payment_intent(
         )
     )
 	);
+
+
+-- 
+CREATE INDEX idx_reconcile_ready
+ON payment.payment_intent(next_reconcile_at,payment_id)
+WHERE status = 'PROCESSING';
+
+CREATE UNIQUE INDEX uniq_psp_reference
+ON payment.payment_intent(psp_name, psp_ref_id)
+WHERE psp_ref_id IS NOT NULL;
