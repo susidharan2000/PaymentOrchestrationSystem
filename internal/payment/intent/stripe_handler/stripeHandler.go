@@ -9,6 +9,7 @@ import (
 	"github.com/susidharan/payment-orchestration-system/internal/domain"
 	model "github.com/susidharan/payment-orchestration-system/internal/payment/intent/model"
 	Repository "github.com/susidharan/payment-orchestration-system/internal/payment/intent/payment_repository"
+
 	"github.com/susidharan/payment-orchestration-system/internal/psp"
 )
 
@@ -42,7 +43,7 @@ func HandleStripePayment(w http.ResponseWriter, paymentDetails domain.PaymentPar
 		} else {
 			//retry
 			log.Print("retry Happened")
-			pi, err := pspProvider.GetPaymentIntent(paymentDetails.PspRefID.String)
+			pi, _, err := pspProvider.GetPaymentIntent(paymentDetails.PspRefID.String)
 			if err != nil {
 				//log.Printf("Error in calling External PSP: %s", err)
 				ErrorResponse(w, http.StatusBadGateway, "psp Error")

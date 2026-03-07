@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/stripe/stripe-go/v78"
-	"github.com/stripe/stripe-go/v78/paymentintent"
+	domain "github.com/susidharan/payment-orchestration-system/internal/domain"
+	psp "github.com/susidharan/payment-orchestration-system/internal/psp"
 )
 
 //get the unresolved Payments from the payment_intent (limit 10)
@@ -16,8 +16,8 @@ import (
 //concurrently  process the payemnt (max concurrency :5) for v1
 // wait untill the all queried payment are resolved
 
-func StartReconciler(repo ReconcilerRepository, r *rand.Rand) {
-	batchSize := 1 // default
+func StartReconciler(repo ReconcilerRepository, r *rand.Rand, registry *psp.Registry) {
+	batchSize := 50 // default
 	if val := os.Getenv("RECONCILER_BATCH_SIZE"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
 			batchSize = parsed
@@ -25,7 +25,7 @@ func StartReconciler(repo ReconcilerRepository, r *rand.Rand) {
 	}
 	PaymentChan := make(chan Payment, batchSize)
 	// concurrently Process Payments and update the ledge
-	spanWorkers(repo, PaymentChan)
+	spanWorkers(repo, PaymentChan, registry)
 	for {
 
 		Payments, err := repo.ClaimUnresolvedPayments(batchSize)
@@ -45,7 +45,7 @@ func StartReconciler(repo ReconcilerRepository, r *rand.Rand) {
 	}
 }
 
-func spanWorkers(repo ReconcilerRepository, PaymentChan chan Payment) {
+func spanWorkers(repo ReconcilerRepository, PaymentChan chan Payment, registry *psp.Registry) {
 	workerCount := 1 // default
 	if val := os.Getenv("RECONCILER_CONCURRENCY"); val != "" {
 		if parsed, err := strconv.Atoi(val); err == nil && parsed > 0 {
@@ -54,12 +54,12 @@ func spanWorkers(repo ReconcilerRepository, PaymentChan chan Payment) {
 	}
 
 	for i := 0; i < workerCount; i++ {
-		rn := rand.New(rand.NewSource(time.Now().UnixNano()))
-		go processPayment(repo, PaymentChan, rn) //wokers that process payment
+		rn := rand.New(rand.NewSource(time.Now().UnixNano() + int64(i)))
+		go processPayment(repo, PaymentChan, rn, registry) //wokers that process payment
 	}
 }
 
-func processPayment(repo ReconcilerRepository, PaymentChan chan Payment, r *rand.Rand) {
+func processPayment(repo ReconcilerRepository, PaymentChan chan Payment, r *rand.Rand, registry *psp.Registry) {
 	for payment := range PaymentChan {
 		func() {
 			defer func() {
@@ -73,42 +73,45 @@ func processPayment(repo ReconcilerRepository, PaymentChan chan Payment, r *rand
 				log.Println("missing psp_ref_id for payment:", payment.PaymentId)
 				return
 			}
-			var pi *stripe.PaymentIntent
+
+			//psp
+			provider, ok := registry.Get(payment.PspName)
+			if !ok {
+				log.Println("unknown PSP:", payment.PspName)
+				return
+			}
+
+			var pi domain.PspIntent
 			var err error
+			var retryable bool
 			// implement the Retry for the 429 and 500 error
 			for attempt := 0; attempt < 3; attempt++ {
-				pi, err = queryStripeByPSPRef(*payment.PspRefID)
+				//pi, err = queryStripeByPSPRef(*payment.PspRefID)
+				pi, retryable, err = provider.GetPaymentIntent(*payment.PspRefID)
 				if err == nil {
+					break
+				}
+				if !retryable {
 					break
 				}
 				// 429 - Rate limit error
 				// 5xx  - Stripe Internal Error
 				// avioding this casue  30s–60s+ delay to resolve payment
-				if stripeErr, ok := err.(*stripe.Error); ok {
-					if stripeErr.HTTPStatusCode == 429 || stripeErr.HTTPStatusCode >= 500 {
-						backoff := time.Duration(1<<attempt) * time.Second      // add the exponential time for each retry
-						jitter := time.Duration(r.Intn(300)) * time.Millisecond // avoid the sequantial time
-						time.Sleep(backoff + jitter)
-						continue
-					}
-				}
-				return
+				backoff := time.Duration(1<<attempt) * time.Second      // add the exponential time for each retry
+				jitter := time.Duration(r.Intn(300)) * time.Millisecond // avoid the sequantial time
+				time.Sleep(backoff + jitter)
 			}
 			if err != nil {
-				log.Printf("stripe call failed after retries: %v", err)
+				log.Printf("PSP query failed after retries for payment %s: %v", payment.PaymentId, err)
 				return
 			}
-			if pi == nil {
-				log.Println("stripe returned nil payment intent")
-				return
-			}
-			log.Println(pi.Status)
+			log.Printf("PSP %s payment status: %v", payment.PspName, pi.Status)
 			switch pi.Status {
-			case stripe.PaymentIntentStatusSucceeded:
+			case domain.StatusSucceeded:
 				if err := repo.AppendLedgerEntry(payment, "CAPTURED"); err != nil {
 					log.Println(err)
 				}
-			case stripe.PaymentIntentStatusCanceled:
+			case domain.StatusFailed:
 				if err := repo.AppendLedgerEntry(payment, "FAILED"); err != nil {
 					log.Println(err)
 				}
@@ -118,12 +121,12 @@ func processPayment(repo ReconcilerRepository, PaymentChan chan Payment, r *rand
 	}
 }
 
-func queryStripeByPSPRef(pspRefID string) (*stripe.PaymentIntent, error) {
-	//ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	//defer cancel()
+// func queryStripeByPSPRef(pspRefID string) (*stripe.PaymentIntent, error) {
+// 	//ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+// 	//defer cancel()
 
-	params := &stripe.PaymentIntentParams{}
-	//params.Context = ctx
+// 	params := &stripe.PaymentIntentParams{}
+// 	//params.Context = ctx
 
-	return paymentintent.Get(pspRefID, params)
-}
+// 	return paymentintent.Get(pspRefID, params)
+// }

@@ -60,16 +60,32 @@ func (a *Adapter) CreatePaymentIntent(paymentDetails domain.PaymentParams) (stri
 	return pi.ID, pi.ClientSecret, nil
 }
 
-func (a *Adapter) GetPaymentIntent(pspRefID string) (domain.PspIntent, error) {
+func (a *Adapter) GetPaymentIntent(pspRefID string) (domain.PspIntent, bool, error) {
 
 	pi, err := paymentintent.Get(pspRefID, nil)
+	var retryable bool = false
 	if err != nil {
-		return domain.PspIntent{}, err
+		if stripeErr, ok := err.(*stripe.Error); ok {
+			if stripeErr.HTTPStatusCode == 429 || stripeErr.HTTPStatusCode >= 500 {
+				retryable = true
+			}
+		}
+		return domain.PspIntent{}, retryable, err
 	}
 
 	var response domain.PspIntent
 	response.ClientSecret = pi.ClientSecret
-	response.Status = string(pi.Status)
+	switch pi.Status {
 
-	return response, nil
+	case stripe.PaymentIntentStatusSucceeded:
+		response.Status = domain.StatusSucceeded
+
+	case stripe.PaymentIntentStatusCanceled:
+		response.Status = domain.StatusFailed
+
+	default:
+		response.Status = domain.StatusProcessing
+	}
+
+	return response, false, nil
 }
