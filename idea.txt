@@ -69,17 +69,27 @@ Reconciler → repair
 
 
 
+--------------------------------
 Payment States
 
-Non-Terminal State 
+Non-Terminal States
 CREATED
-PROCESSING  means: We do not know the truth yet, but the truth already exists in some ledger.   
+PROCESSING  -  means: We do not know the truth yet, but the truth already exists in some ledger.
 
-Terminal State 
+
+Terminal Payment States
 CAPTURED
 FAILED
 CANCELLED
 
+
+Post-Payment States  
+PARTIALLY_REFUNDED
+REFUNDED
+
+(NOTE : CAPTURED -> PARTIALLY_REFUNDED / REFUNDED)
+
+-------------------------------------
 DLQ State 
 Manual_review_required
  
@@ -254,14 +264,27 @@ Crash Ater presisting in Ledger_Entry Table and before presisting in Payment_Int
 5) Projector
 
 *****derive state from ledger and update payment intent*****
-not just copy
+
+
+Payment State Derivation (Refund)
+
+refunded_amount && status is 'CAPTURED' == 0
+→ SUCCEEDED
+
+0 < refunded_amount < captured_amount && && status is 'CAPTURED'
+→ PARTIALLY_REFUNDED
+
+refunded_amount == captured_amount 
+→ REFUNDED
+
+
 
 
 
 Projector is allowed to move state ONLY in one direction:
 from non-terminal → terminal, based on ledger facts.
 
-PROCESSING / UNKNOWN → CAPTURED / FAILED
+PROCESSING → CAPTURED / FAILED
                                    
                                    Projector
                                    ↓
@@ -280,21 +303,111 @@ Implementation:
     *Ledger is additive.
 
 
+----------------------------------------------------------------------------------------------------------
+REFUND 
+REFUND
+
+ * System supports:
+    * Full Refund
+    * Partial Refund
+    * Multiple Partial Refund
+
+ * Duplicate refunds are prevented using an idempotency_key
+
+ * The external system that requests the refund manages the idempotency_key
+
+ * A refund is allowed only when:
+      refund_amount <= remaining_refundable
+
+ * remaining_refundable =
+      captured_amount - refunded_amount
+
+ * The refund is processed asynchronously because the user will not wait on the page for the refund
+
+ * Refund completion may be notified via:
+      * SMS
+      * Email
+      * Webhooks
+      * Merchant dashboard updates
+
+
+Refund Flow
+
+                                 Merchant System
+                                       ↓
+                                       ↓
+                                   Refund API
+                                       ↓
+                                       ↓
+                          Validate refund request
+                                       ↓
+                                       ↓
+                     Insert refund_record (status = PENDING)
+                                       ↓
+                                       ↓
+                                Refund Worker
+                                       ↓
+                                       ↓
+                      Update refund_record → PROCESSING
+                                       ↓
+                                       ↓
+                        External PSP Call (PSP Refund)
+                                       ↓
+                                       ↓
+                        PSP confirms refund success
+                                       ↓
+                                       ↓
+                          Ledger_Entry (Append REFUND fact)
+                                       ↓
+                                       ↓
+                          Emit RefundExecuted Event
+                                       ↓
+                                       ↓
+                                Event Consumers
+                                       ↓
+                        Notification Service (SMS / Email)
+                        Payment Projector (derive refund state)
+                        Analytics / Reporting
+
+
+
+----------------------------------------------------------------------------------------------------------
 Data Base Schema
 
 1)payment_intent
+
     * payment_id - Primary Key  NOT NULL
     * idempotency_key  NOT NULL
-    * state  - CHECK (CREATED, PROCESSING, CAPTURED, FAILED, CANCELLED) NOT NULL
-    * amount NOT NULL
+
+    * state - CHECK (
+        CREATED,
+        PROCESSING,
+        CAPTURED,
+        FAILED,
+        CANCELLED,
+        PARTIALLY_REFUNDED,
+        REFUNDED
+      ) NOT NULL
+
+    * amount NOT NULL (original intent of the payment)
+    * captured_amount NOT NULL DEFAULT 0   (how much money actually moved from the customer to the merchant.)
+    * refunded_amount NOT NULL DEFAULT 0 (how much money has been returned to the customer.)
+
     * currency NOT NULL
-    * psp_ref_id - NULL 
-    * psp_name  NOT NULL
+
+    * psp_ref_id NULL
+    * psp_name NOT NULL
+
     * request_hash NOT NULL
-    * create_at NOT NULL
-    * claimed_at NULL - reconciler claim
+
+    * created_at NOT NULL
+
+    * reconciler_claimed_at NULL
+    * reconcile_attempts DEFAULT 0
+    * last_reconcile_error NULL
+
     UNIQUE(idempotency_key)
-    UNIQUE (psp_ref_id) 
+    UNIQUE(psp_ref_id)
 
 2)ledger_entries (Append only) - frobid DELETE and UPDATE with triggers  
    * ledger_entry_id NOT NULL  Primary Key 
@@ -306,6 +419,19 @@ Data Base Schema
    * psp_name 
    * created_at
    UNIQUE (psp_name, psp_ref_id) // to support correctness accross multiple PSP's
+
+3) refund_record
+   * refund_entry_id NOT NULL
+   * idempotency_key  NOT NULL
+   * status - PENDING / PROCESSING / SUCCEEDED / FAILED
+   * payment_id  REFERENCES  payment_intent(payment_id)
+   * amount
+   * currency
+   * psp_payment_ref_id
+   * psp_refund_id
+   * created_at
+   UNIQUE(idempotency_key)
+   UNIQUE (psp_refund_id)
 
 
 
@@ -326,7 +452,8 @@ The system is designed so mistakes are detectable and fixable, not hidden.
           
 
 *************************************************** Version 2 ************************************************************
-  (Domain Extension) 
+  * Add the Razor Pay 
+  * PSP Routing 
   * Circute Breaker
   * Timeouts
   * backOFF

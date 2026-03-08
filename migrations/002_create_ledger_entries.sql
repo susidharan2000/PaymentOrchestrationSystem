@@ -4,9 +4,9 @@ CREATE TABLE IF NOT EXISTS payment.ledger_entries (
 				DEFAULT gen_random_uuid(),
 
 			entry_type TEXT NOT NULL
-				CHECK (entry_type IN ('CAPTURED','FAILED')),
+				CHECK (entry_type IN ('CAPTURED','FAILED','REFUND')),
 
-			payment_id UUID NULL
+			payment_id UUID NOT NULL
 				REFERENCES payment.payment_intent(payment_id),
 
 			amount BIGINT NOT NULL
@@ -24,31 +24,15 @@ CREATE TABLE IF NOT EXISTS payment.ledger_entries (
 			UNIQUE (psp_name, psp_ref_id)
 		);
 
+
+
 CREATE OR REPLACE FUNCTION payment.guard_ledger_mutation()
 RETURNS trigger AS $$
 BEGIN
-    IF TG_OP = 'UPDATE' THEN
-        IF OLD.payment_id IS NULL
-           AND NEW.payment_id IS NOT NULL
-           AND OLD.entry_type = NEW.entry_type
-           AND OLD.amount = NEW.amount
-           AND OLD.currency = NEW.currency
-           AND OLD.psp_name = NEW.psp_name
-           AND OLD.psp_ref_id = NEW.psp_ref_id
-        THEN
-            RETURN NEW;
-        END IF;
-
-        RAISE EXCEPTION 'ledger_entries is append-only';
-    END IF;
-
     RAISE EXCEPTION 'ledger_entries is append-only';
 END;
 $$ LANGUAGE plpgsql;
 
-
-DROP TRIGGER IF EXISTS no_ledger_update ON payment.ledger_entries;
-DROP TRIGGER IF EXISTS no_ledger_delete ON payment.ledger_entries;
 
 CREATE TRIGGER no_ledger_update
 BEFORE UPDATE ON payment.ledger_entries

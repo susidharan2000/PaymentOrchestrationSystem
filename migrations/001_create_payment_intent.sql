@@ -2,9 +2,11 @@ CREATE TABLE IF NOT EXISTS  payment.payment_intent(
 		payment_id UUID PRIMARY KEY,
 		idempotency_key TEXT NOT NULL,
 		status TEXT NOT NULL CHECK (
-			status IN ('CREATED', 'PROCESSING', 'CAPTURED', 'FAILED', 'CANCELLED', 'EXPIRED')
+			status IN ('CREATED', 'PROCESSING', 'CAPTURED', 'FAILED', 'CANCELLED', 'PARTIALLY_REFUNDED','REFUNDED')
 		),
 		amount BIGINT NOT NULL CHECK (amount > 0),
+        captured_amount BIGINT NOT NULL DEFAULT 0,
+        refunded_amount BIGINT NOT NULL DEFAULT 0,
 		currency TEXT NOT NULL CHECK (char_length(currency) = 3),
 		psp_ref_id TEXT NULL,
 		psp_name TEXT NOT NULL,
@@ -18,6 +20,18 @@ CREATE TABLE IF NOT EXISTS  payment.payment_intent(
 
         CONSTRAINT uniq_idempotency UNIQUE (idempotency_key),
 
+        CONSTRAINT payment_money_invariants CHECK (
+        captured_amount <= amount
+        AND refunded_amount <= captured_amount
+        ),
+
+        -- Refund State Consistancy
+        CONSTRAINT refund_state_consistency CHECK (
+        status NOT IN ('PARTIALLY_REFUNDED','REFUNDED')
+        OR refunded_amount > 0
+        ),
+
+        -- Payment Consistancy
 		CONSTRAINT payment_state_psp_consistency
         CHECK (
         ( -- Worker domain: Eligible states for worker to claim the payment
@@ -35,6 +49,11 @@ CREATE TABLE IF NOT EXISTS  payment.payment_intent(
             AND psp_ref_id IS NOT NULL
         )
         OR
+        (  -- Post-capture refund states
+        status IN ('PARTIALLY_REFUNDED','REFUNDED')
+        AND psp_ref_id IS NOT NULL
+        )
+        OR
         ( -- payment Cancelled
             status = 'CANCELLED'
         )
@@ -42,7 +61,7 @@ CREATE TABLE IF NOT EXISTS  payment.payment_intent(
 	);
 
 
--- 
+-- Index
 CREATE INDEX idx_reconcile_ready
 ON payment.payment_intent(next_reconcile_at,payment_id)
 WHERE status = 'PROCESSING';
@@ -50,3 +69,18 @@ WHERE status = 'PROCESSING';
 CREATE UNIQUE INDEX uniq_psp_reference
 ON payment.payment_intent(psp_name, psp_ref_id)
 WHERE psp_ref_id IS NOT NULL;
+
+
+-- Trigger For update
+CREATE OR REPLACE FUNCTION payment.set_updated_at()
+RETURNS trigger AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER payment_intent_updated_at
+BEFORE UPDATE ON payment.payment_intent
+FOR EACH ROW
+EXECUTE FUNCTION payment.set_updated_at();
