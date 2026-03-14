@@ -7,14 +7,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/susidharan/payment-orchestration-system/internal/domain"
-
-	///Users/susidharan/Go Developmant/PaymentOrchestrationSystem/internal/payment/intent/model
 	model "github.com/susidharan/payment-orchestration-system/internal/payment/intent/model"
 )
 
 type PaymentRepository interface {
 	PersistPaymentRequest(req model.CreatePaymentRequest, requestHash string) (paymentDetails domain.PaymentParams, created bool, err error)
-	MarkProcessing(PaymentId string, pspReferenceID string) error
+	MarkProcessing(PaymentId string, Amount int64, pspReferenceID string) error
 	GetPaymentById(PaymentId string) (model.PaymentDetailsByID, error)
 	//CancelPayment(ctx context.Context, paymentID string) error
 }
@@ -48,13 +46,13 @@ func (r *repo) PersistPaymentRequest(req model.CreatePaymentRequest, requestHash
 	return paymentDetails, created, nil
 }
 
-func (r *repo) MarkProcessing(PaymentId string, pspReferenceID string) error {
+func (r *repo) MarkProcessing(PaymentId string, Amount int64, pspReferenceID string) error {
 	row, err := r.db.Exec(`UPDATE payment.payment_intent 
-	SET status = 'PROCESSING',psp_ref_id = $1,updated_at = now()
-	WHERE payment.payment_intent.payment_id=$2 
+	SET status = 'PROCESSING',psp_ref_id = $1,captured_amount = $2,updated_at = now()
+	WHERE payment.payment_intent.payment_id=$3 
 	AND payment.payment_intent.status='CREATED'
 	AND payment.payment_intent.psp_ref_id IS NULL
-	`, pspReferenceID, PaymentId)
+	`, pspReferenceID, Amount, PaymentId)
 	if err != nil {
 		return err
 	}

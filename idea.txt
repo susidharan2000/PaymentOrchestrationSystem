@@ -304,7 +304,6 @@ Implementation:
 
 
 ----------------------------------------------------------------------------------------------------------
-REFUND 
 REFUND
 
  * System supports:
@@ -369,6 +368,40 @@ Refund Flow
                         Payment Projector (derive refund state)
                         Analytics / Reporting
 
+
+1)create Refund recording
+
+
+   - in refund - getting the payment_id(internl) in header
+	payload = {
+		"amount":1000,
+	   "idempotency_key":"sample_idempotency_key_123"
+	}
+1: validate the refund request - query the payment_intent_table check the (captured_amount - refunded_amount >= refund_amount) if true then return paymentDetails
+2: After validation create the refund Payment in Refund Record
+
+   case 1: New Refund Request
+         - create refund intent in the refund_record Table
+         - if recoed not Exist then validate the refund request in paymet_intentTable
+         - if valid then update the payment_intnet then update the refund_record and finally return
+         - if not valid then the return payment_not_refundable
+   case 2: Retry Refund Request
+         - try create refund intent in the refund_record Table
+         - if the record already exist then return the refund Details
+
+   API DESIGN 
+      BEGIN
+      INSERT refund_record (idempotency gate)
+      
+      IF conflict:
+         return existing refund
+
+      validate remaining refundable from ledger
+      IF invalid:
+         rollback
+      
+      UPDATE refund_record metadata
+      COMMIT
 
 
 ----------------------------------------------------------------------------------------------------------

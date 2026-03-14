@@ -43,3 +43,9 @@ CREATE TRIGGER no_ledger_delete
 BEFORE DELETE ON payment.ledger_entries
 FOR EACH ROW
 EXECUTE FUNCTION payment.guard_ledger_mutation();
+
+
+
+
+CREATE INDEX idx_ledger_payment
+ON payment.ledger_entries(payment_id);

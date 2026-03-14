@@ -36,7 +36,7 @@ func (a *Adapter) CreatePaymentIntent(paymentDetails domain.PaymentParams) (stri
 
 	// Manual Conformation
 	params := &stripe.PaymentIntentParams{
-		Amount:   stripe.Int64(paymentDetails.Amount * 100),
+		Amount:   stripe.Int64(paymentDetails.Amount),
 		Currency: stripe.String(paymentDetails.Currency),
 		Metadata: map[string]string{
 			"payment_id": paymentDetails.PaymentId,

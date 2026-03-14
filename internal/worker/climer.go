@@ -8,7 +8,7 @@ package worker
 // 	"time"
 // )
 
-// func StartWorkers(repo workerRepository) {
+// func StartRefundWorkers(repo workerRepository) {
 
 // 	workerCount := 2 // default
 // 	if val := os.Getenv("WORKER_COUNT"); val != "" {
@@ -32,30 +32,30 @@ package worker
 // func worker(repo workerRepository) {
 // 	for {
 // 		//claim the payment
-// 		//paymentDetails, err := repo.ClaimPayment()
-// 		// if err == sql.ErrNoRows {
-// 		// 	//sleep fop 2 seconds
-// 		// 	//log.Println("no work available")
-// 		// 	time.Sleep(time.Second * 5)
-// 		// 	continue
-// 		// }
-// 		// if err != nil {
-// 		// 	log.Println("claim error:", err)
-// 		// 	time.Sleep(2 * time.Second)
-// 		// 	continue
-// 		// }
-// 		// //log.Println(paymentDetails)
-// 		// //call the External PSP
-// 		// //pspRefID, err := stripeclient.CreatePaymentIntent(paymentDetails)
-// 		// if err != nil {
-// 		// 	log.Printf("Error in Worker calling External PSP: %s", err)
-// 		// 	continue
+// 		paymentDetails, err := repo.ClaimPayment()
+// 		if err == sql.ErrNoRows {
+// 			//sleep fop 2 seconds
+// 			//log.Println("no work available")
+// 			time.Sleep(time.Second * 5)
+// 			continue
 // 		}
-// 		//log.Println(pspRefID)
+// 		if err != nil {
+// 			log.Println("claim error:", err)
+// 			time.Sleep(2 * time.Second)
+// 			continue
+// 		}
+// 		//log.Println(paymentDetails)
+// 		//call the External PSP
+// 		pspRefID, err := stripeclient.CreatePaymentIntent(paymentDetails)
+// 		if err != nil {
+// 			log.Printf("Error in Worker calling External PSP: %s", err)
+// 			continue
+// 		}
+// 		log.Println(pspRefID)
 // 		//update the payment_intent State
-// 		// if err := repo.MarkProcessing(paymentDetails.PaymentId, pspRefID); err != nil {
-// 		// 	log.Printf("MarkProcessing error: %v", err)
-// 		// }
+// 		if err := repo.MarkProcessing(paymentDetails.PaymentId, pspRefID); err != nil {
+// 			log.Printf("MarkProcessing error: %v", err)
+// 		}
 
 // 		//retun the client_secret top the client
 // 	}

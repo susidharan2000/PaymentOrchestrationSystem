@@ -20,17 +20,17 @@ CREATE TABLE IF NOT EXISTS  payment.payment_intent(
 
         CONSTRAINT uniq_idempotency UNIQUE (idempotency_key),
 
-        CONSTRAINT payment_money_invariants CHECK (
-        captured_amount <= amount
-        AND refunded_amount <= captured_amount
-        ),
-
         -- Refund State Consistancy
         CONSTRAINT refund_state_consistency CHECK (
-        status NOT IN ('PARTIALLY_REFUNDED','REFUNDED')
+        status != 'PARTIALLY_REFUNDED'
         OR refunded_amount > 0
         ),
 
+        CONSTRAINT refund_full_consistency CHECK (
+        status != 'REFUNDED'
+        OR refunded_amount = captured_amount
+        ),
+        
         -- Payment Consistancy
 		CONSTRAINT payment_state_psp_consistency
         CHECK (

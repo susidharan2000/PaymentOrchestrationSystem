@@ -14,11 +14,11 @@ CREATE TABLE IF NOT EXISTS payment.refund_record (
 			amount BIGINT NOT NULL
 				CHECK (amount > 0),
 
-			currency TEXT NOT NULL
+			currency TEXT 
 				CHECK (char_length(currency) = 3),
 
-			psp_name TEXT NOT NULL,
-			psp_payment_ref_id TEXT NOT NULL CHECK (length(psp_payment_ref_id) > 0),
+			psp_name TEXT ,
+			psp_payment_ref_id TEXT CHECK (length(psp_payment_ref_id) > 0),
             psp_refund_id TEXT CHECK (length(psp_refund_id) > 0),
 
 			created_at TIMESTAMPTZ NOT NULL
@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS payment.refund_record (
             UNIQUE(idempotency_key),
             UNIQUE(psp_refund_id),
 
+			--terminal state must have the psp_refund_id
 			CHECK (
             status NOT IN ('SUCCEEDED','FAILED')
             OR psp_refund_id IS NOT NULL
