@@ -44,7 +44,7 @@ func (r *repo) CreateRefundRecord(req refund_model.RefundRequest, paymentID stri
 	}
 
 	// Insert to the Refund Record
-	row = tx.QueryRow(`INSERT INTO payment.refund_record (idempotency_key, payment_id, amount, status) VALUES ($1,$2,$3,'PENDING') ON CONFLICT (idempotency_key) DO NOTHING RETURNING refund_entry_id;`, req.Idempotencykey, paymentID, req.Amount)
+	row = tx.QueryRow(`INSERT INTO payment.refund_record (idempotency_key, payment_id, amount, status) VALUES ($1,$2,$3,'PENDING') ON CONFLICT (payment_id, idempotency_key) DO NOTHING RETURNING refund_entry_id;`, req.Idempotencykey, paymentID, req.Amount)
 	err = row.Scan(&refundDetails.RefundID)
 	if err == sql.ErrNoRows {
 		//query with the idempotency_key and get the refund Details

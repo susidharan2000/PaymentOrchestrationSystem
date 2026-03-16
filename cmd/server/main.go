@@ -16,6 +16,7 @@ import (
 	refund_repo "github.com/susidharan/payment-orchestration-system/internal/refund/intent/refund_repository"
 	state_projector "github.com/susidharan/payment-orchestration-system/internal/state_projector"
 	Webhook_Repo "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/webhook_repository"
+	refund_worker "github.com/susidharan/payment-orchestration-system/internal/workers/refund_worker"
 )
 
 func main() {
@@ -35,10 +36,11 @@ func main() {
 	registry := psp.NewRegistry()
 	registry.Register("stripe", stripePSP.NewAdapter())
 
+	//Repositories
 	// get payment Repo
 	paymentRepo := paymentrepo.NewPaymentRepository(db)
 	// get Worker Repo
-	//workerRepo := worker.NewWorkerRepository(db)
+	workerRepo := refund_worker.NewReundWorkerRepository(db)
 	//web hook Repo
 	webhookRepo := Webhook_Repo.NewWebhookRepository(db)
 	//Projector Repo
@@ -48,11 +50,12 @@ func main() {
 	//refund Intent Repo
 	refundIntentRepo := refund_repo.NewRefundRepository(db)
 
+	//backGround Processing
 	go state_projector.StartProjector(projectorRepo) // start State Projector
 
 	//go reconciler.StartReconciler(reconcilerRepo, r, registry) // start Reconciler
 
-	//go worker.StartRefundWorkers(workerRepo) //start Refund_Worker poll
+	go refund_worker.StartRefundWorkers(workerRepo, registry) //start Refund_Worker poll
 
 	router := internalhttp.NewRouter(paymentRepo, webhookRepo, refundIntentRepo, registry)
 	port := 8080

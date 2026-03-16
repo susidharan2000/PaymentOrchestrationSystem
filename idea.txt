@@ -318,8 +318,7 @@ REFUND
  * A refund is allowed only when:
       refund_amount <= remaining_refundable
 
- * remaining_refundable =
-      captured_amount - refunded_amount
+ * remaining_refundable = captured_from_ledger - refunded_from_ledger - pending_refunds
 
  * The refund is processed asynchronously because the user will not wait on the page for the refund
 
@@ -353,7 +352,7 @@ Refund Flow
                         External PSP Call (PSP Refund)
                                        ↓
                                        ↓
-                        PSP confirms refund success
+                        PSP confirms refund success (webhook)(reconciler)
                                        ↓
                                        ↓
                           Ledger_Entry (Append REFUND fact)
@@ -369,39 +368,90 @@ Refund Flow
                         Analytics / Reporting
 
 
-1)create Refund recording
+1) Create Refund Recording
+
+In refund API the payment_id (internal) is passed in the header.
+
+Payload
+{
+  "amount": 1000,
+  "idempotency_key": "sample_idempotency_key_123"
+}
+
+The system creates a refund reservation before validation to prevent
+concurrent over-refund.
+
+validate the refund request :
+
+remaining_refundable =
+captured_from_ledger - refunded_from_ledger - pending_refunds
+
+requested_amount <= remaining_refundable
 
 
-   - in refund - getting the payment_id(internl) in header
-	payload = {
-		"amount":1000,
-	   "idempotency_key":"sample_idempotency_key_123"
-	}
-1: validate the refund request - query the payment_intent_table check the (captured_amount - refunded_amount >= refund_amount) if true then return paymentDetails
-2: After validation create the refund Payment in Refund Record
+Case 1: New Refund Request
+- create refund reservation in refund_record table
+- validate refund request using ledger
+- if valid update refund_record metadata and return refund details
+- if not valid return payment_not_refundable
 
-   case 1: New Refund Request
-         - create refund intent in the refund_record Table
-         - if recoed not Exist then validate the refund request in paymet_intentTable
-         - if valid then update the payment_intnet then update the refund_record and finally return
-         - if not valid then the return payment_not_refundable
-   case 2: Retry Refund Request
-         - try create refund intent in the refund_record Table
-         - if the record already exist then return the refund Details
 
-   API DESIGN 
-      BEGIN
-      INSERT refund_record (idempotency gate)
-      
-      IF conflict:
-         return existing refund
+Case 2: Retry Refund Request
+- attempt to create refund reservation
+- if reservation already exists return existing refund details
 
-      validate remaining refundable from ledger
-      IF invalid:
-         rollback
-      
-      UPDATE refund_record metadata
-      COMMIT
+
+API DESIGN
+
+BEGIN
+
+SELECT payment metadata FROM payment_intent
+
+INSERT refund_record (idempotency_key, payment_id, amount, status = PENDING) (idempotency Gate / reservation)
+
+IF conflict
+    return existing refund
+
+validate remaining refundable from ledger
+
+remaining =
+captured_from_ledger - refunded_from_ledger - pending_refunds
+
+IF remaining < refund_amount
+    ROLLBACK
+    return payment_not_refundable
+
+UPDATE refund_record metadata
+
+COMMIT
+
+
+CONCURRENCY HANDLING (WITHOUT ROW LOCKING)
+
+The system prevents concurrent over-refunds using a reservation mechanism
+instead of database row locks.
+
+Before validation a refund reservation is inserted into refund_record.
+
+INSERT refund_record (idempotency_key, payment_id, amount, status = PENDING)
+
+Refund validation includes existing reservations.
+
+remaining_refundable =
+captured_from_ledger - refunded_from_ledger - pending_refunds
+
+pending_refunds =
+SUM(amount)
+FROM refund_record
+WHERE payment_id = ?
+AND status IN (PENDING, PROCESSING)
+
+Because pending reservations are included in validation,
+concurrent refund requests cannot exceed the captured amount.
+
+
+
+2) Refund Worker 
 
 
 ----------------------------------------------------------------------------------------------------------

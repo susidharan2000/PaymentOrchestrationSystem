@@ -5,6 +5,7 @@ import (
 
 	"github.com/stripe/stripe-go/v78"
 	"github.com/stripe/stripe-go/v78/paymentintent"
+	"github.com/stripe/stripe-go/v78/refund"
 	"github.com/susidharan/payment-orchestration-system/internal/domain"
 )
 
@@ -88,4 +89,20 @@ func (a *Adapter) GetPaymentIntent(pspRefID string) (domain.PspIntent, bool, err
 	}
 
 	return response, false, nil
+}
+
+// refund Creation
+func (a *Adapter) CreateRefund(pspPaymentRefID string, amount int64, idempotencyKey string) (string, error) {
+
+	params := &stripe.RefundParams{
+		PaymentIntent: stripe.String(pspPaymentRefID),
+		Amount:        stripe.Int64(amount),
+	}
+	params.SetIdempotencyKey(idempotencyKey)
+
+	r, err := refund.New(params)
+	if err != nil {
+		return "", err
+	}
+	return r.ID, nil
 }
