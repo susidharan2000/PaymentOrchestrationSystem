@@ -42,7 +42,7 @@ func worker(repo workerRepository, registry *psp.Registry) {
 		}
 		if refundDetails.refundID == "" {
 			//sleep fop 2 seconds
-			log.Println("no work available")
+			//log.Println("no work available")
 			time.Sleep(3*time.Second + time.Duration(rand.Intn(2000))*time.Millisecond)
 			continue
 		}

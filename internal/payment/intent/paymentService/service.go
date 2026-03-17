@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	model "github.com/susidharan/payment-orchestration-system/internal/payment/intent/model"
@@ -41,7 +42,7 @@ func CreatePayment(w http.ResponseWriter, r *http.Request, repo Repository.Payme
 	//hash Request
 	var paymentHash model.PaymentFingerprint
 	paymentHash.Amount = req.Amount
-	paymentHash.Currency = req.Currency
+	paymentHash.Currency = strings.ToUpper(req.Currency)
 	paymentHash.PSPName = req.PspName
 	requestHash, err := ComputeRequestHash(paymentHash)
 	if err != nil {
