@@ -8,3 +8,8 @@ type WebhookPaymentDetails struct {
 	Currency  string
 	PspName   string
 }
+
+type EventDetails struct {
+	PspName string
+	EventID string
+}

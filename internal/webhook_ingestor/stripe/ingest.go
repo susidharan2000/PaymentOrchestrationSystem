@@ -14,8 +14,10 @@ import (
 )
 
 func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo WebhookRepo.WebhookRepository) {
+
 	payload, err := io.ReadAll(r.Body)
 	if err != nil {
+		log.Println("invalid payload", err)
 		http.Error(w, "invalid payload", http.StatusBadRequest)
 		return
 	}
@@ -41,13 +43,18 @@ func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo WebhookRepo.W
 		return
 	}
 	log.Printf("evt_id: %s", event.ID)
+	eventDetails := model.EventDetails{
+		PspName: "STRIPE",
+		EventID: event.ID,
+	}
 	//update the ledger
 	switch event.Type {
 	case "payment_intent.succeeded", "payment_intent.payment_failed":
 		// extract the Payment Intent Details from the event
 		var pi stripe.PaymentIntent
 		if err = json.Unmarshal(event.Data.Raw, &pi); err != nil {
-			http.Error(w, "failed to parse event", http.StatusInternalServerError)
+			log.Println("failed to parse event", err)
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 		piID := pi.ID
@@ -64,64 +71,54 @@ func Webhook_ingestor(w http.ResponseWriter, r *http.Request, repo WebhookRepo.W
 		log.Printf("PiID: %s", piID)
 		switch event.Type {
 		case "payment_intent.succeeded":
-			if err := updatePaymentResult(paymentDetails, "CAPTURED", repo); err != nil {
-				http.Error(w, "ledger write failed", http.StatusInternalServerError)
+			//append only in ledger
+			if err := repo.ProcessSuccessPaymentWebhook(paymentDetails, eventDetails); err != nil {
+				log.Println("processing failed:", err)
+				w.WriteHeader(http.StatusOK)
 				return
 			}
+			log.Println("Payment Webhook Process Completed")
 		case "payment_intent.payment_failed":
-			if err := updatePaymentResult(paymentDetails, "FAILED", repo); err != nil {
-				http.Error(w, "ledger write failed", http.StatusInternalServerError)
+			//update in payment_intent
+			if err := repo.ProcessFailedPaymentWebhook(paymentDetails, eventDetails); err != nil {
+				log.Println("processing failed:", err)
+				w.WriteHeader(http.StatusOK)
 				return
 			}
+			log.Println("Payment Webhook Process Completed")
 		}
 	case "refund.updated":
 		var r stripe.Refund
 		if err = json.Unmarshal(event.Data.Raw, &r); err != nil {
-			http.Error(w, "failed to parse event", http.StatusInternalServerError)
+			log.Println("failed to parse event", err)
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 		log.Printf("Refund Status: %s", r.Status)
 		switch r.Status {
 		case stripe.RefundStatusSucceeded:
+			//append only in ledger
 			log.Printf("pspRefund_id: %s", r.ID)
-			if err := updateRefundStatus(r.ID, "REFUND", repo); err != nil {
-				http.Error(w, "ledger write failed", http.StatusInternalServerError)
+			if err := repo.ProcessSuccessRefundWebhook(r.ID, eventDetails); err != nil {
+				log.Println("processing failed:", err)
+				w.WriteHeader(http.StatusOK)
 				return
 			}
+			log.Println("Refund Webhook Process Completed")
 		case stripe.RefundStatusFailed:
+			//update in refund_record
 			log.Printf("pspRefund_id: %s", r.ID)
-			if err := updateRefundStatus(r.ID, "FAILED", repo); err != nil {
-				http.Error(w, "ledger write failed", http.StatusInternalServerError)
+			if err := repo.ProcessFailedRefundWebhook(r.ID, eventDetails); err != nil {
+				log.Println("processing failed:", err)
+				w.WriteHeader(http.StatusOK)
 				return
 			}
+			log.Println("Refund Webhook Process Completed")
 		default:
-
+			log.Printf("Unhandled refund status: %s", r.Status)
 		}
-
 	default:
-
+		log.Printf("Unhandled event type: %s", event.Type)
 	}
 	w.WriteHeader(http.StatusOK)
-}
-
-// handle payment_intent Webhook
-func updatePaymentResult(paymentDetails model.WebhookPaymentDetails, paymentStatus string, repo WebhookRepo.WebhookRepository) error {
-	//process the wehhook
-	if err := repo.ProcessPaymentWebhook(paymentDetails, paymentStatus); err != nil {
-		log.Println(err)
-		return err
-	}
-	log.Println("Webhook Process Completed")
-	return nil
-}
-
-// handle refund Webhook
-func updateRefundStatus(refundID string, paymentStatus string, repo WebhookRepo.WebhookRepository) error {
-	//process the refund Webhook
-	if err := repo.ProcessRefundWebhook(refundID, paymentStatus); err != nil {
-		log.Println(err)
-		return err
-	}
-	log.Println("Webhook Process Completed")
-	return nil
 }

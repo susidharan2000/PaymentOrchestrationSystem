@@ -4,10 +4,13 @@ CREATE TABLE IF NOT EXISTS payment.ledger_entries (
 				DEFAULT gen_random_uuid(),
 
 			entry_type TEXT NOT NULL
-				CHECK (entry_type IN ('CAPTURED','FAILED','REFUND')),
+				CHECK (entry_type IN ('PAYMENT','REFUND')),
 
 			payment_id UUID NOT NULL
 				REFERENCES payment.payment_intent(payment_id),
+
+			refund_id UUID
+                REFERENCES payment.refund_record(refund_entry_id),
 
 			amount BIGINT NOT NULL
 				CHECK (amount > 0),
@@ -21,7 +24,13 @@ CREATE TABLE IF NOT EXISTS payment.ledger_entries (
 			created_at TIMESTAMPTZ NOT NULL
 				DEFAULT now(),
 
-			UNIQUE (psp_name, psp_ref_id)
+			UNIQUE (psp_name, psp_ref_id),
+
+			CHECK (
+                (entry_type IN ('REFUND') AND refund_id IS NOT NULL)
+            OR
+            (entry_type IN ('PAYMENT') AND refund_id IS NULL)
+            )
 		);
 
 

@@ -26,8 +26,14 @@ CREATE TABLE IF NOT EXISTS payment.refund_record (
 	retry_count INTEGER NOT NULL DEFAULT 0,
 	max_retry INTEGER NOT NULL DEFAULT 5,
 
+	-- reconciler
+	next_reconcile_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	reconcile_attempts INTEGER DEFAULT 0,
+    last_reconcile_error TEXT NULL,
+
 	created_at TIMESTAMPTZ NOT NULL
 		DEFAULT now(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     UNIQUE(payment_id,idempotency_key),
 
@@ -54,6 +60,26 @@ CREATE TABLE IF NOT EXISTS payment.refund_record (
 	    )
 );
 
+-- Trigger for Updated_at
+
+CREATE OR REPLACE FUNCTION payment.set_updated_at()
+RETURNS trigger AS $$
+BEGIN
+    IF row(NEW.*) IS DISTINCT FROM row(OLD.*) THEN
+        NEW.updated_at = now();
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_updated_at_trigger
+BEFORE UPDATE ON payment.refund_record
+FOR EACH ROW
+EXECUTE FUNCTION payment.set_updated_at();
+
+
+-- Indexing  
 CREATE UNIQUE INDEX uniq_psp_refund_id
 ON payment.refund_record(psp_refund_id)
 WHERE psp_refund_id IS NOT NULL;
+

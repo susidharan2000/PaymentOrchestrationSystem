@@ -12,7 +12,7 @@ import (
 	psp "github.com/susidharan/payment-orchestration-system/internal/psp"
 	stripePSP "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
 
-	//"github.com/susidharan/payment-orchestration-system/internal/reconciler"
+	//reconciler "github.com/susidharan/payment-orchestration-system/internal/reconciler"
 	refund_repo "github.com/susidharan/payment-orchestration-system/internal/refund/intent/refund_repository"
 	state_projector "github.com/susidharan/payment-orchestration-system/internal/state_projector"
 	Webhook_Repo "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/webhook_repository"
@@ -53,9 +53,11 @@ func main() {
 	//backGround Processing
 	go state_projector.StartProjector(projectorRepo) // start State Projector
 
-	//go reconciler.StartReconciler(reconcilerRepo, r, registry) // start Reconciler
+	//go reconciler.StartPaymentReconciler(reconcilerRepo, r, registry) // start payment Reconciler
 
 	go refund_worker.StartRefundWorkers(workerRepo, registry) //start Refund_Worker poll
+
+	//go reconciler.StartRefundReconciler(reconcilerRepo, r, registry) // start refund Reconciler
 
 	router := internalhttp.NewRouter(paymentRepo, webhookRepo, refundIntentRepo, registry)
 	port := 8080

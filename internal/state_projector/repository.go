@@ -18,7 +18,7 @@ func NewProjectorRepository(db *sql.DB) ProjectorRepository {
 func (r *repo) projectState() error {
 	_, err := r.db.Exec(`UPDATE payment.payment_intent p
 	SET status = CASE 
-	WHEN EXISTS (SELECT 1 FROM payment.ledger_entries le WHERE p.payment_id = le.payment_id AND le.entry_type = 'CAPTURED') THEN 'CAPTURED'
+	WHEN EXISTS (SELECT 1 FROM payment.ledger_entries le WHERE p.payment_id = le.payment_id AND le.entry_type = 'PAYMENT') THEN 'CAPTURED'
 	WHEN EXISTS (SELECT 1 FROM payment.ledger_entries le WHERE p.payment_id = le.payment_id AND le.entry_type = 'FAILED') THEN 'FAILED'
 	ELSE p.status
 	END

@@ -69,7 +69,7 @@ func (r *repo) CreateRefundRecord(req refund_model.RefundRequest, paymentID stri
 		remainingRefundable int64
 	)
 	row = tx.QueryRow(`SELECT
-    COALESCE(SUM(amount) FILTER (WHERE entry_type = 'CAPTURED'), 0),
+    COALESCE(SUM(amount) FILTER (WHERE entry_type = 'PAYMENT'), 0),
     COALESCE(SUM(amount) FILTER (WHERE entry_type = 'REFUND'), 0),
     (
         SELECT COALESCE(SUM(amount), 0)

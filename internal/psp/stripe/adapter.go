@@ -106,3 +106,28 @@ func (a *Adapter) CreateRefund(pspPaymentRefID string, amount int64, idempotency
 	}
 	return r.ID, nil
 }
+
+func (a *Adapter) GetRefund(pspRefundID string) (domain.PaymentStatus, bool, error) {
+	rf, err := refund.Get(pspRefundID, nil)
+
+	retryable := false
+	if err != nil {
+		if stripeErr, ok := err.(*stripe.Error); ok {
+			if stripeErr.HTTPStatusCode == 429 || stripeErr.HTTPStatusCode >= 500 {
+				retryable = true
+			}
+		}
+		return domain.StatusProcessing, retryable, err
+	}
+
+	switch rf.Status {
+	case stripe.RefundStatusSucceeded:
+		return domain.StatusSucceeded, false, nil
+
+	case stripe.RefundStatusFailed:
+		return domain.StatusFailed, false, nil
+
+	default:
+		return domain.StatusProcessing, false, nil
+	}
+}

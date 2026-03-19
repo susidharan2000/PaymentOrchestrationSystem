@@ -15,6 +15,17 @@ type Payment struct {
 	CreatedAt time.Time
 }
 
+type Refund struct {
+	PaymentID   string
+	RefundID    string
+	Status      string
+	Amount      int64
+	Currency    string
+	PspName     string
+	PspRefundID *string
+	CreatedAt   time.Time
+}
+
 type EventLogDetails struct {
 	PspName      string
 	PspEventID   string

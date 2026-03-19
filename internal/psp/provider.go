@@ -14,4 +14,5 @@ type PSP interface {
 	CreatePaymentIntent(paymentDetails domain.PaymentParams) (string, string, error)
 	GetPaymentIntent(pspRefID string) (domain.PspIntent, bool, error)
 	CreateRefund(pspPaymentRefID string, amount int64, idempotencyKey string) (string, error)
+	GetRefund(pspRefundID string) (domain.PaymentStatus, bool, error)
 }

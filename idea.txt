@@ -457,6 +457,24 @@ concurrent refund requests cannot exceed the captured amount.
 ----------------------------------------------------------------------------------------------------------
 Data Base Schema
 
+ledger_entries      → SOURCE OF TRUTH (money movement)
+   * Immutable
+   * Append-only
+   * Financially correct
+   * tracks the money movement  (PAYMENT - in  /  REFUND - out)
+
+payment_intent      → DERIVED STATE (read model / cache)
+   * Mutable
+   * Can be wrong temporarily
+   * Eventually consistent
+   * Should be updated by projector 
+
+refund_record       → WORKFLOW STATE (process control)
+   * Not financial truth
+   * Just orchestration state
+   
+webhook_events      → IDEMPOTENCY
+
 1)payment_intent
 
     * payment_id - Primary Key  NOT NULL
@@ -494,7 +512,7 @@ Data Base Schema
 
 2)ledger_entries (Append only) - frobid DELETE and UPDATE with triggers  
    * ledger_entry_id NOT NULL  Primary Key 
-   * entry_type - CAPTURED / FAILED
+   * entry_type - CAPTURED / REFUND
    * payment_id  REFERENCES  payment_intent(payment_id)
    * amount 
    * currency
@@ -515,6 +533,13 @@ Data Base Schema
    * created_at
    UNIQUE(idempotency_key)
    UNIQUE (psp_refund_id)
+
+4)WebhookEvent // handle duplicate wehbook
+   * id Primary Key
+   * event_id NOT NULL
+   * psp_name NOT NULL
+   * created_at 
+    UNIQUE (event_id,psp_name)
 
 
 
