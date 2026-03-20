@@ -108,11 +108,11 @@ func processPayment(repo ReconcilerRepository, PaymentChan chan Payment, r *rand
 			log.Printf("PSP %s payment status: %v", payment.PspName, pi.Status)
 			switch pi.Status {
 			case domain.StatusSucceeded:
-				if err := repo.AppendLedgerEntry(payment, "CAPTURED"); err != nil {
+				if err := repo.RecordPaymentSuccess(payment); err != nil {
 					log.Println(err)
 				}
 			case domain.StatusFailed:
-				if err := repo.AppendLedgerEntry(payment, "FAILED"); err != nil {
+				if err := repo.MarkPaymentFailed(payment); err != nil {
 					log.Println(err)
 				}
 			default:

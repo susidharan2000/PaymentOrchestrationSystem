@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
+	"time"
 
 	"github.com/joho/godotenv"
 	internaldb "github.com/susidharan/payment-orchestration-system/internal/database"
@@ -12,7 +14,7 @@ import (
 	psp "github.com/susidharan/payment-orchestration-system/internal/psp"
 	stripePSP "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
 
-	//reconciler "github.com/susidharan/payment-orchestration-system/internal/reconciler"
+	reconciler "github.com/susidharan/payment-orchestration-system/internal/reconciler"
 	refund_repo "github.com/susidharan/payment-orchestration-system/internal/refund/intent/refund_repository"
 	state_projector "github.com/susidharan/payment-orchestration-system/internal/state_projector"
 	Webhook_Repo "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/webhook_repository"
@@ -30,7 +32,7 @@ func main() {
 	defer db.Close()
 
 	//seed the Jitter
-	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// Psp registry
 	registry := psp.NewRegistry()
@@ -46,18 +48,18 @@ func main() {
 	//Projector Repo
 	projectorRepo := state_projector.NewProjectorRepository(db)
 	//Reconciler Repository
-	//reconcilerRepo := reconciler.NewReconcilerRepository(db)
+	reconcilerRepo := reconciler.NewReconcilerRepository(db)
 	//refund Intent Repo
 	refundIntentRepo := refund_repo.NewRefundRepository(db)
 
 	//backGround Processing
 	go state_projector.StartProjector(projectorRepo) // start State Projector
 
-	//go reconciler.StartPaymentReconciler(reconcilerRepo, r, registry) // start payment Reconciler
+	go reconciler.StartPaymentReconciler(reconcilerRepo, r, registry) // start payment Reconciler
 
 	go refund_worker.StartRefundWorkers(workerRepo, registry) //start Refund_Worker poll
 
-	//go reconciler.StartRefundReconciler(reconcilerRepo, r, registry) // start refund Reconciler
+	go reconciler.StartRefundReconciler(reconcilerRepo, r, registry) // start refund Reconciler
 
 	router := internalhttp.NewRouter(paymentRepo, webhookRepo, refundIntentRepo, registry)
 	port := 8080

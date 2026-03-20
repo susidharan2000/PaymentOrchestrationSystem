@@ -2,14 +2,18 @@ package reconciler
 
 import (
 	"database/sql"
-	"fmt"
 )
 
 type ReconcilerRepository interface {
+	//payment
 	ClaimUnresolvedPayments(limit int) ([]Payment, error)
+	RecordPaymentSuccess(payment Payment) error
+	MarkPaymentFailed(paymentDetails Payment) error
+
+	//refund
 	ClaimUnresolvedRefunds(limit int) ([]Refund, error)
-	AppendLedgerEntry(payment Payment, paymentStatus string) error
-	RefundSuccessEntry(refundPayment Refund, refundStatus string) error
+	RefundSuccessEntry(refundPayment Refund) error
+	MarkRefundFailed(refundPayment Refund) error
 }
 
 type repo struct {
@@ -29,7 +33,8 @@ func (r *repo) ClaimUnresolvedPayments(limit int) ([]Payment, error) {
 	query := `WITH rows AS(
 		SELECT payment_id
 		FROM payment.payment_intent
-		WHERE status IN ('PROCESSING') AND 
+		WHERE status IN ('PROCESSING','FAILED') AND 
+		psp_ref_id IS NOT NULL AND
 		(
 			next_reconcile_at <= now()
 		)
@@ -76,8 +81,59 @@ func (r *repo) ClaimUnresolvedPayments(limit int) ([]Payment, error) {
 	return payments, nil
 }
 
-//refund
+// payment success handler
+func (r *repo) RecordPaymentSuccess(paymentDetails Payment) error {
+	isCommited := false
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if !isCommited {
+			tx.Rollback()
+		}
+	}()
+	// Append in the psp_ledger entries
+	query := `INSERT INTO payment.ledger_entries (entry_type, payment_id, amount, currency, psp_name, psp_ref_id) SELECT 'PAYMENT', pi.payment_id, $2, $3, $4, $1
+        FROM payment.payment_intent pi
+        WHERE pi.psp_ref_id = $1
+        ON CONFLICT (psp_name, psp_ref_id) DO NOTHING;
+	`
+	if _, err := tx.Exec(query, paymentDetails.PspRefID, paymentDetails.Amount, paymentDetails.Currency, paymentDetails.PspName); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	isCommited = true
+	return nil
+}
 
+// payment Failure handler
+func (r *repo) MarkPaymentFailed(paymentDetails Payment) error {
+	isCommited := false
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if !isCommited {
+			tx.Rollback()
+		}
+	}()
+	//update the payment_intnent
+	_, err = tx.Exec(`UPDATE payment.payment_intent SET status = 'FAILED' WHERE psp_ref_id = $1 AND status = 'PROCESSING'`, paymentDetails.PspRefID)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	isCommited = true
+	return nil
+}
+
+// refund
 func (r *repo) ClaimUnresolvedRefunds(limit int) ([]Refund, error) {
 	//implement Lease Claim Pattern to claim payment
 	// - because it avoids the multiple unnessary psp calls
@@ -86,7 +142,7 @@ func (r *repo) ClaimUnresolvedRefunds(limit int) ([]Refund, error) {
 	query := `WITH rows AS(
 		SELECT refund_entry_id
 		FROM payment.refund_record
-		WHERE status = 'PROCESSING'
+		WHERE status IN ('PROCESSING','FAILED')
 		AND psp_refund_id IS NOT NULL 
 		AND next_reconcile_at <= now()
 		ORDER BY next_reconcile_at ASC, refund_entry_id ASC
@@ -139,37 +195,8 @@ func (r *repo) ClaimUnresolvedRefunds(limit int) ([]Refund, error) {
 	return refunds, nil
 }
 
-// payment
-func (r *repo) AppendLedgerEntry(paymentDetails Payment, paymentStatus string) error {
-	isCommited := false
-	tx, err := r.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if !isCommited {
-			tx.Rollback()
-		}
-	}()
-	// Append in the psp_ledger entries
-	query := `INSERT INTO payment.ledger_entries (entry_type, payment_id, amount, currency, psp_name, psp_ref_id) SELECT $2, pi.payment_id, $3, $4, $5, $1
-        FROM payment.payment_intent pi
-        WHERE pi.psp_ref_id = $1
-        AND pi.status = 'PROCESSING'
-        ON CONFLICT (psp_name, psp_ref_id) DO NOTHING;
-	`
-	if _, err := tx.Exec(query, paymentDetails.PspRefID, paymentStatus, paymentDetails.Amount, paymentDetails.Currency, paymentDetails.PspName); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	isCommited = true
-	return nil
-}
-
 // Refund Success entry
-func (r *repo) RefundSuccessEntry(refundPayment Refund, refundStatus string) error {
+func (r *repo) RefundSuccessEntry(refundPayment Refund) error {
 	isCommited := false
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -184,49 +211,25 @@ func (r *repo) RefundSuccessEntry(refundPayment Refund, refundStatus string) err
 	query := `INSERT INTO payment.ledger_entries 
 	(entry_type, payment_id, amount, currency, psp_name, psp_ref_id, refund_id)
 	SELECT 
-		$1,
+		'REFUND',
 		r.payment_id,
 		r.amount,
 		r.currency,
 		r.psp_name,
 		r.psp_refund_id,
-		$2
+		r.refund_entry_id
 	FROM payment.refund_record r
-	WHERE r.refund_entry_id = $2
-	AND r.status = 'PROCESSING'
+	WHERE r.refund_entry_id = $1
 	AND r.psp_refund_id IS NOT NULL
 	ON CONFLICT (psp_name, psp_ref_id) DO NOTHING;
 	`
-	res, err := tx.Exec(query, refundStatus, refundPayment.RefundID)
+	_, err = tx.Exec(query, refundPayment.RefundID)
 	if err != nil {
 		return err
 	}
-	rows, _ := res.RowsAffected()
-	if rows == 0 {
-		//ambiguous case
-		var status string
-		err = tx.QueryRow(`
-		SELECT status FROM payment.refund_record
-		WHERE refund_entry_id = $1
-	`, refundPayment.RefundID).Scan(&status)
 
-		if err != nil {
-			return err
-		}
-		if status == "SUCCEEDED" || status == "FAILED" {
-			return tx.Commit()
-		}
-		return fmt.Errorf("invalid state: ledger not inserted and still processing")
-	}
-	// update the state in the refund Record
-	var refundRecordStatus string
-	if refundStatus == "REFUND" {
-		refundRecordStatus = "SUCCEEDED"
-	} else {
-		refundRecordStatus = "FAILED"
-	}
-	if _, err := tx.Exec(`UPDATE payment.refund_record SET status = $1 WHERE refund_entry_id = $2 AND status = 'PROCESSING';
-	`, refundRecordStatus, refundPayment.RefundID); err != nil {
+	if _, err := tx.Exec(`UPDATE payment.refund_record SET status = 'SUCCEEDED' WHERE refund_entry_id = $1 AND status = 'PROCESSING';
+	`, refundPayment.RefundID); err != nil {
 		return err
 	}
 
@@ -237,4 +240,26 @@ func (r *repo) RefundSuccessEntry(refundPayment Refund, refundStatus string) err
 	return nil
 }
 
-//refund Failure entry
+// refund Failure entry
+func (r *repo) MarkRefundFailed(refundPayment Refund) error {
+	isCommited := false
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if !isCommited {
+			tx.Rollback()
+		}
+	}()
+	if _, err := tx.Exec(`UPDATE payment.refund_record SET status = 'FAILED' WHERE refund_entry_id = $1 AND status = 'PROCESSING';
+	`, refundPayment.RefundID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	isCommited = true
+	return nil
+}

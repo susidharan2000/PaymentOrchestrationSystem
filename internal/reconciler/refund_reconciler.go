@@ -107,11 +107,11 @@ func processRefund(repo ReconcilerRepository, refundChan chan Refund, r *rand.Ra
 			log.Printf("PSP %s refund status: %v", refundPayment.PspName, refundStatus)
 			switch refundStatus {
 			case domain.StatusSucceeded:
-				if err := repo.RefundSuccessEntry(refundPayment, "REFUND"); err != nil {
+				if err := repo.RefundSuccessEntry(refundPayment); err != nil {
 					log.Println(err)
 				}
 			case domain.StatusFailed:
-				if err := repo.RefundSuccessEntry(refundPayment, "REFUND_FAILED"); err != nil {
+				if err := repo.RefundSuccessEntry(refundPayment); err != nil {
 					log.Println(err)
 				}
 			default:
