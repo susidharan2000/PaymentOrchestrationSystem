@@ -1,4 +1,4 @@
-package webhookingestor
+package webhookworker
 
 type WebhookPaymentDetails struct {
 	PiID      string
@@ -10,8 +10,8 @@ type WebhookPaymentDetails struct {
 }
 
 type EventDetails struct {
-	PspName   string
-	EventID   string
-	EventType string
-	Payload   []byte
+	PspName  string
+	ID       int64
+	Attempts int64
+	Payload  []byte
 }
