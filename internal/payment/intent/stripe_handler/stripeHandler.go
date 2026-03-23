@@ -56,7 +56,7 @@ func HandleStripePayment(w http.ResponseWriter, paymentDetails domain.PaymentPar
 	//log.Printf("PSP_REFERANCE ID :%s", pspRefID)
 	//log.Printf("PSP_CLIENT : %s", client_secret)
 	//presist payment status to Processing , presist psp_ref_id
-	if err := repo.MarkProcessing(paymentDetails.PaymentId, paymentDetails.Amount, pspRefID); err != nil {
+	if err := repo.MarkProcessing(paymentDetails.PaymentId, pspRefID); err != nil {
 		log.Printf("MarkProcessing error: %v", err)
 	}
 	//return client_secret Key in respince

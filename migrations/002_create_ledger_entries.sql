@@ -1,7 +1,9 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS payment.ledger_entries (
-			ledger_entry_id UUID PRIMARY KEY
-				DEFAULT gen_random_uuid(),
+	        seq BIGSERIAL PRIMARY KEY,
+			ledger_entry_id UUID NOT NULL
+				DEFAULT gen_random_uuid()
+				UNIQUE,
 
 			entry_type TEXT NOT NULL
 				CHECK (entry_type IN ('PAYMENT','REFUND')),

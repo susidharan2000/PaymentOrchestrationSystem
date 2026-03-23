@@ -12,8 +12,8 @@ import (
 	psp "github.com/susidharan/payment-orchestration-system/internal/psp"
 	stripePSP "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
 
+	event_projector "github.com/susidharan/payment-orchestration-system/internal/event_projector"
 	refund_repo "github.com/susidharan/payment-orchestration-system/internal/refund/intent/refund_repository"
-	state_projector "github.com/susidharan/payment-orchestration-system/internal/state_projector"
 	Webhook_Repo "github.com/susidharan/payment-orchestration-system/internal/webhook_ingestor/webhook_repository"
 	refund_worker "github.com/susidharan/payment-orchestration-system/internal/workers/refund_worker"
 	webhook_worker "github.com/susidharan/payment-orchestration-system/internal/workers/webhook_worker"
@@ -44,7 +44,7 @@ func main() {
 	//webhook Ingestion Repo
 	webhookIntentRepo := Webhook_Repo.NewWebhookRepository(db)
 	//Projector Repo
-	projectorRepo := state_projector.NewProjectorRepository(db)
+	projectorRepo := event_projector.NewProjectorRepository(db)
 	//Reconciler Repository
 	//reconcilerRepo := reconciler.NewReconcilerRepository(db)
 	//refund Intent Repo
@@ -53,7 +53,7 @@ func main() {
 	webhookWorkerReop := webhook_worker.NewWebhookWorkerRepository(db)
 
 	//backGround Processing
-	go state_projector.StartProjector(projectorRepo) // start State Projector
+	go event_projector.StartProjector(projectorRepo) // start State Projector
 
 	//go reconciler.StartPaymentReconciler(reconcilerRepo, r, registry) // start payment Reconciler
 
