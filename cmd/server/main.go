@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
+	"time"
 
 	"github.com/joho/godotenv"
 	internaldb "github.com/susidharan/payment-orchestration-system/internal/database"
@@ -11,6 +13,7 @@ import (
 	paymentrepo "github.com/susidharan/payment-orchestration-system/internal/payment/intent/payment_repository"
 	psp "github.com/susidharan/payment-orchestration-system/internal/psp"
 	stripePSP "github.com/susidharan/payment-orchestration-system/internal/psp/stripe"
+	"github.com/susidharan/payment-orchestration-system/internal/reconciler"
 
 	event_projector "github.com/susidharan/payment-orchestration-system/internal/event_projector"
 	refund_repo "github.com/susidharan/payment-orchestration-system/internal/refund/intent/refund_repository"
@@ -30,7 +33,7 @@ func main() {
 	defer db.Close()
 
 	//seed the Jitter
-	//r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 
 	// Psp registry
 	registry := psp.NewRegistry()
@@ -46,7 +49,7 @@ func main() {
 	//Projector Repo
 	projectorRepo := event_projector.NewProjectorRepository(db)
 	//Reconciler Repository
-	//reconcilerRepo := reconciler.NewReconcilerRepository(db)
+	reconcilerRepo := reconciler.NewReconcilerRepository(db)
 	//refund Intent Repo
 	refundIntentRepo := refund_repo.NewRefundRepository(db)
 	//webhook Worker Repo
@@ -55,11 +58,11 @@ func main() {
 	//backGround Processing
 	go event_projector.StartProjector(projectorRepo) // start State Projector
 
-	//go reconciler.StartPaymentReconciler(reconcilerRepo, r, registry) // start payment Reconciler
+	go reconciler.StartPaymentReconciler(reconcilerRepo, r, registry) // start payment Reconciler
 
 	go refund_worker.StartRefundWorkers(workerRepo, registry) //start Refund_Worker poll
 
-	//go reconciler.StartRefundReconciler(reconcilerRepo, r, registry) // start refund Reconciler
+	go reconciler.StartRefundReconciler(reconcilerRepo, r, registry) // start refund Reconciler
 
 	go webhook_worker.StartWebhookWorkers(webhookWorkerReop) // start webhook Worker
 

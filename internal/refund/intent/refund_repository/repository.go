@@ -38,7 +38,7 @@ func (r *repo) CreateRefundRecord(req refund_model.RefundRequest, paymentID stri
 	defer tx.Rollback()
 	//Lock the payment
 	var paymentDetails refund_model.PaymentDetails
-	row := tx.QueryRow(`SELECT payment_id, currency, psp_name, psp_ref_id FROM payment.payment_intent WHERE payment_id=$1;`, paymentID)
+	row := tx.QueryRow(`SELECT payment_id, currency, psp_name, psp_ref_id FROM payment.payment_intent WHERE payment_id=$1 FOR UPDATE;`, paymentID)
 	if err := row.Scan(&paymentDetails.PaymentId, &paymentDetails.Currency, &paymentDetails.PspName, &paymentDetails.PspRefID); err != nil {
 		return refund_model.RefundDetails{}, false, err
 	}
@@ -68,18 +68,19 @@ func (r *repo) CreateRefundRecord(req refund_model.RefundRequest, paymentID stri
 		pendingRefunds      int64
 		remainingRefundable int64
 	)
-	row = tx.QueryRow(`SELECT
-    COALESCE(SUM(amount) FILTER (WHERE entry_type = 'PAYMENT'), 0),
-    COALESCE(SUM(amount) FILTER (WHERE entry_type = 'REFUND'), 0),
+	row = tx.QueryRow(`SELECT 
+    captured_amount,
+    refunded_amount,
     (
         SELECT COALESCE(SUM(amount), 0)
         FROM payment.refund_record
         WHERE payment_id = $1
         AND status IN ('PENDING','PROCESSING')
-		AND refund_entry_id != $2
+        AND refund_entry_id != $2
     )
-    FROM payment.ledger_entries
-    WHERE payment_id = $1;`, paymentID, refundDetails.RefundID)
+	FROM payment.payment_intent
+	WHERE payment_id = $1;
+	`, paymentID, refundDetails.RefundID)
 	if err = row.Scan(&capturedAmount, &refundedAmount, &pendingRefunds); err != nil {
 		return refund_model.RefundDetails{}, false, err
 	}

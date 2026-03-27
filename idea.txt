@@ -368,6 +368,7 @@ Refund Flow
                         Analytics / Reporting
 
 
+
 1) Create Refund Recording
 
 In refund API the payment_id (internal) is passed in the header.
@@ -405,7 +406,7 @@ API DESIGN
 
 BEGIN
 
-SELECT payment metadata FROM payment_intent
+SELECT payment metadata FROM payment_intent FOR UPDATE
 
 INSERT refund_record (idempotency_key, payment_id, amount, status = PENDING) (idempotency Gate / reservation)
 
@@ -580,3 +581,28 @@ Liveness + Infrastructure
   * 1M+ concurrent users
   * Instant success responce 
   * Reao time update 
+
+
+
+
+
+
+1. Introduction  
+2. Problem Statement  
+3. System Overview  
+4. Architecture Diagram  
+5. End-to-End Flow  
+6. Internal Processing & Component Behavior  
+
+7. Idempotency & Deduplication  
+8. Concurrency & Consistency  
+
+9. Failure Handling & Recovery  
+
+10. Data Model  
+
+11. Design Trade-offs  
+
+12. Scaling Considerations  
+
+13. Limitations (Optional but STRONGLY recommended)

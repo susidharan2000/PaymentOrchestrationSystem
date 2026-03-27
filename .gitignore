@@ -12,7 +12,11 @@ Thumbs.db
 .idea/
 .vscode/
 *.iml
+.txt
 
 Test_SQL.txt
 
 test
+
+idea.txt
+plan.txt
