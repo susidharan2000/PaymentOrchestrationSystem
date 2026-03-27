@@ -228,3 +228,28 @@ These trade-offs simplify correctness and failure handling.
 👉 **[Full Design Document](docs/DESIGN.pdf)**
 
 ---
+
+Create a ⁠ .env ⁠ file:
+
+```env
+# Database
+DATABASE_URL=postgres://payment_user:payment_pass@localhost:5432/payment_orchestration?sslmode=disable
+
+# Stripe (use your own test keys)
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=your_webhook_secret
+STRIPE_PUBLISHABLE_KEY=your_publishable_key
+
+# Workers
+REFUND_WORKER_COUNT=10
+WEBHOOK_WORKER_COUNT=10
+
+# Payment Reconciliation
+PAYMENT_RECONCILER_BATCH_SIZE=10
+PAYMENT_RECONCILER_CONCURRENCY=5
+
+# Refund Reconciliation
+REFUND_RECONCILER_BATCH_SIZE=10
+REFUND_RECONCILER_CONCURRENCY=5
+
+```
