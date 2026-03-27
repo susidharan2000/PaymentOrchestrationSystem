@@ -1,8 +1,9 @@
 # Payment Orchestration System
 
-> **A correctness-first payment processing system**  
-> _Designed to guarantee financial safety under retries, crashes, and concurrency_
->
+> A payment system that **never produces incorrect financial state**, even under retries, crashes, and concurrent operations.
+
+Most systems optimize for success cases.  
+This system is designed for **failure as the default condition**.
 > _**Tech Stack**: Go, PostgreSQL, Event-Driven Architecture, Background Workers_
 
 ---
@@ -16,6 +17,7 @@
 > - Execution is idempotent across all layers  
 > - Failures are expected and handled deterministically  
 >
+> Unlike typical systems that mutate state directly, this system treats financial operations as immutable facts and derives state from them.
 ---
 
 ## Problem Statement
@@ -31,6 +33,24 @@
 > The real problem is:
 >
 > 👉 **Ensuring financial correctness despite retries, failures, and concurrency**
+
+---
+
+## Why naive systems fail
+
+A naive system directly updates payment state during request handling.
+
+This breaks under real-world conditions:
+
+- Retries → duplicate charges or refunds  
+- Crashes → partial state updates  
+- Concurrency → race conditions and over-refund  
+
+This system avoids these issues by:
+
+- Recording only **confirmed financial events**
+- Separating **intent from execution**
+- Deriving state instead of mutating it directly
 
 ---
 
@@ -60,7 +80,65 @@
 
 ---
 
-## Guarantees
+## End-to-End Flow
+
+### PAYMENT flow:
+
+1. Client initiates payment → payment_intent created  
+2. External PSP processes payment  
+3. Webhook / reconciliation confirms outcome  
+4. PAYMENT event written to ledger  
+5. Projector updates derived state  
+
+### Refund flow:
+
+1. Client requests refund  
+2. System validates using reservation model  
+3. refund_record created (PENDING)  
+4. Worker executes refund via PSP  
+5. Webhook / reconciliation confirms  
+6. REFUND event written to ledger  
+7. Projector updates derived state  
+
+---
+
+## Core Concepts
+
+### Ledger (Source of Truth)
+All confirmed financial actions are recorded as immutable events.
+The ledger is append-only and guarantees auditability and replayability.
+
+### Projection (Derived State)
+The current payment state is derived asynchronously from the ledger.
+This separates write correctness from read performance.
+
+### Idempotency
+Idempotency is enforced across all layers:
+- API layer (request hash / idempotency key)
+- Database layer (unique constraints)
+- Ledger (external reference uniqueness)
+- Projector (event sequence tracking)
+
+This ensures retries do not create duplicate financial effects.
+
+### Concurrency Control
+Refunds use row-level locking and a reservation model:
+- Prevents race conditions
+- Prevents over-refund
+- Ensures deterministic allocation under concurrency
+
+---
+
+## Design Philosophy
+
+The system prioritizes:
+- Correctness over performance  
+- Determinism over convenience  
+- Failure recovery over success-path optimization  
+
+---
+
+## System Guarantees
 
 This system guarantees:
 
@@ -144,20 +222,3 @@ These trade-offs simplify correctness and failure handling.
 👉 **[DESIGN.md](./DESIGN.md)**
 
 ---
-
-## Build & Run
-
-### Prerequisites
-
-- **Go 1.20+**
-- **PostgreSQL**
-
----
-
-### Configuration
-
-Environment variables:
-
-```bash
-DB_URL=postgres://user:password@localhost:5432/payments
-WORKER_COUNT=10
