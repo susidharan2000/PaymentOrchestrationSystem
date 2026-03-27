@@ -4,8 +4,14 @@
 
 > Most systems optimize for success cases.  
 > This system is designed for **failure as the default condition**.
-> _**Tech Stack**: Go, PostgreSQL, Event-Driven Architecture, Background Workers_
+>
+> _**Tech Stack**: Go, PostgreSQL_
 
+> _**Key Design Choices**:
+> - Append-only ledger (source of truth)
+> - Idempotency enforcement across all layers
+> - Background workers using FOR UPDATE SKIP LOCKED
+> - Event-driven projection model (eventual consistency)
 ---
 
 ## Overview
@@ -219,6 +225,6 @@ These trade-offs simplify correctness and failure handling.
 
 **Full design rationale, data model, and failure scenarios:**
 
-👉 **[DESIGN.md](docs/DESIGN.pdf)**
+👉 **[Full Design Document](docs/DESIGN.pdf)**
 
 ---
