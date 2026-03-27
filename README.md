@@ -1,121 +1,163 @@
 # Payment Orchestration System
 
-A payment system designed to guarantee financial correctness under retries, crashes, and concurrent execution.
-
-Most payment systems break under failure:
-- The same request executes twice → double charge  
-- A crash occurs mid-operation → inconsistent state  
-- Concurrent refunds exceed captured amount → financial corruption  
-
-This system prevents these failures by modeling payments as:
-- **Immutable financial events (ledger)**  
-- **Deterministic state derived from history**  
-- **Strict idempotency and reservation-based validation**  
-
-The result is a system where:
-- retries are safe  
-- failures are recoverable  
-- correctness is guaranteed by design  
+> **A correctness-first payment processing system**  
+> _Designed to guarantee financial safety under retries, crashes, and concurrency_
+>
+> _**Tech Stack**: Go, PostgreSQL, Event-Driven Architecture, Background Workers_
 
 ---
 
-## Why this exists
+## Overview
 
-Real-world payment systems are unreliable:
+> Payment Orchestration System is a backend system designed to process payments and refunds **without creating incorrect financial state under failure**.
+>
+> The system is intentionally built around correctness:
+> - All financial actions are persisted as immutable events  
+> - Execution is idempotent across all layers  
+> - Failures are expected and handled deterministically  
+>
+---
 
-- Requests are retried due to network failures  
-- Systems crash during processing  
-- External payment providers behave unpredictably  
+## Problem Statement
 
-Without careful design, this leads to:
-- Duplicate charges or refunds  
-- Inconsistent financial state  
-- Race conditions under concurrency  
-
-This project focuses on building a system that remains correct under all these conditions.
+> Payment systems fail in non-obvious ways:
+>
+> - Duplicate requests → multiple captures  
+> - Partial failures → inconsistent state  
+> - Concurrent refunds → over-refund  
+> - Missed webhooks → lost financial updates  
+>
+> Preventing retries is impossible.  
+> The real problem is:
+>
+> 👉 **Ensuring financial correctness despite retries, failures, and concurrency**
 
 ---
 
-## Core Ideas
+## Core Design Principle
 
-- Ledger as source of truth  
-  All financial actions are stored as immutable events  
-
-- Projection-based state  
-  Current payment state is derived asynchronously  
-
-- Idempotency at every layer  
-  Safe retries across API, workers, and event ingestion  
-
-- Reservation-based refunds  
-  Prevents over-refund under concurrent requests  
-
-- At-least-once processing  
-  Duplicate processing is allowed but made safe via deduplication  
+> The system is built on a single invariant:
+>
+> 👉 **Financial state must always be correct and derivable from history**
+>
+> This is achieved by:
+>
+> - Using an **append-only ledger** as the source of truth  
+> - Deriving state asynchronously via projection  
+> - Enforcing **idempotency at every layer**  
+> - Using a **reservation model** to prevent over-refund  
+>
+> Correctness is enforced by design, not by retry logic.
 
 ---
 
-## Architecture Overview
+## ⚙️ Architecture
 
-![Architecture Diagram](./docs/architectureV1.png)
-
-1. Incoming requests generate financial events (PAYMENT / REFUND)  
-2. Events are stored in an append-only ledger  
-3. A projector processes events and derives current state  
-4. Reads are served from the derived state  
+**Execution flow:**
+<p align="center">
+  <img src="docs/architectureV1.png" alt="Payment Orchestration System Architecture" width="900">
+</p>
 
 ---
 
-## Key Guarantees
+## Guarantees
 
-- No duplicate financial effects  
-- No over-refund under concurrency  
-- Deterministic recovery via ledger replay  
-- No partial state visibility (atomic operations)  
-- Eventual consistency for reads  
-- Safe handling of retries and duplicate events  
+This system guarantees:
 
----
+- **No duplicate financial effects**  
+- **No over-refund under concurrency**  
+- **Deterministic recovery via ledger replay**  
+- **No partial state visibility (atomic operations)**  
+- **Eventual consistency for reads**  
+- **At-least-once processing with idempotency**
 
-## Trade-offs
-
-- Increased system complexity due to event-driven design  
-- Eventual consistency for read models  
-- Database used as coordination layer (limits scalability)  
+Duplicate processing is allowed by design but does not affect correctness.
 
 ---
 
-## Limitations
+## Performance Characteristics
 
-- Database can become a bottleneck under high load  
-- Worker polling introduces inefficiency  
-- Projector throughput is limited by sequential processing  
-- Single-region deployment (no cross-region fault tolerance)  
+System performance depends on workload characteristics:
 
----
+| Component | Bottleneck |
+|----------|-----------|
+| Writes | Database transactions |
+| Workers | External PSP latency |
+| Reads | Projection lag |
 
-## Full Design Document
+Under typical workload:
+- Write latency is dominated by DB commit  
+- Processing latency depends on external providers  
+- Read latency is near real-time but eventually consistent  
 
-For detailed architecture, data model, failure scenarios, and trade-offs:
-
-👉 [Design Document](./)
-
----
-
-## Key Highlights
-
-- Designed for correctness over performance  
-- Handles failures as a first-class concern  
-- Ensures financial safety under concurrency  
-- Supports deterministic recovery via replay  
+The system prioritizes **correctness over throughput**.
 
 ---
 
-## Future Improvements
+## Observability
 
-- Move to queue-based architecture (Kafka / message broker)  
-- Partition projector for parallel processing  
-- Introduce multi-region support  
-- Optimize worker coordination and reduce polling  
+The system exposes operational visibility via:
+
+- payment state transitions  
+- refund lifecycle tracking  
+- webhook ingestion status  
+- retry and failure counts  
+- reconciliation activity  
+
+These signals help verify correctness under failure scenarios.
 
 ---
+
+## Failure Model
+
+The system assumes failures are normal.
+
+| Failure Scenario | System Behavior |
+|------------------|-----------------|
+| API retry | Idempotent request handling prevents duplication |
+| Worker crash | Job retried safely via idempotent execution |
+| Missed webhook | Reconciliation recovers state |
+| Duplicate events | Deduplicated at ledger level |
+| Partial failure | Transaction rollback prevents corruption |
+
+Failure handling is **deterministic and repeatable**.
+
+---
+
+## Non-Goals
+
+The system explicitly does **NOT** attempt to solve:
+
+- **Exactly-once processing**  
+- **Strong consistency for reads**  
+- **Distributed multi-region coordination**  
+- **High-throughput streaming systems**  
+
+These trade-offs simplify correctness and failure handling.
+
+---
+
+## Design Details
+
+**Full design rationale, data model, and failure scenarios:**
+
+👉 **[DESIGN.md](./DESIGN.md)**
+
+---
+
+## Build & Run
+
+### Prerequisites
+
+- **Go 1.20+**
+- **PostgreSQL**
+
+---
+
+### Configuration
+
+Environment variables:
+
+```bash
+DB_URL=postgres://user:password@localhost:5432/payments
+WORKER_COUNT=10
