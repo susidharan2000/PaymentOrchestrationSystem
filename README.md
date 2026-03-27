@@ -2,8 +2,8 @@
 
 > A payment system that **never produces incorrect financial state**, even under retries, crashes, and concurrent operations.
 
-Most systems optimize for success cases.  
-This system is designed for **failure as the default condition**.
+> Most systems optimize for success cases.  
+> This system is designed for **failure as the default condition**.
 > _**Tech Stack**: Go, PostgreSQL, Event-Driven Architecture, Background Workers_
 
 ---
@@ -219,6 +219,6 @@ These trade-offs simplify correctness and failure handling.
 
 **Full design rationale, data model, and failure scenarios:**
 
-👉 **[DESIGN.md](./DESIGN.md)**
+👉 **[DESIGN.md](docs/DESIGN.pdf)**
 
 ---
