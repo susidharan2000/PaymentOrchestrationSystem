@@ -335,13 +335,11 @@ Creating a payment via API does **NOT** move money.
 POST /payments
 ```
 
-2. Copy `client_secret` from response
+2. Run `view/checkout.html` in browser
 
-3. Run `view/checkout.html` in browser
+3. Enter the card details and confirm the payment
 
-4. Enter the card details and confirm the payment
-
-5. Use Stripe test card:
+4. Use Stripe test card:
 
 ```bash
 4242 4242 4242 4242
