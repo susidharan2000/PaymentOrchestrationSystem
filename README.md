@@ -22,29 +22,29 @@ _**Extensibility**: Multi-PSP (adapter pattern), multi-tenant via scoped idempot
 
 ## Overview
 
- Payment Orchestration System is a backend system designed to process payments and refunds **without creating incorrect financial state under failure**.
->
-> The system is intentionally built around correctness:
-> - All financial actions are persisted as immutable events  
-> - Execution is idempotent across all layers  
-> - Failures are expected and handled deterministically  
+Payment Orchestration System is a backend system designed to process payments and refunds **without creating incorrect financial state under failure**.
 
->
+The system is intentionally built around correctness:
+- All financial actions are persisted as immutable events  
+- Execution is idempotent across all layers  
+- Failures are expected and handled deterministically  
+
+
 ---
 
 ## Problem Statement
 
 Payment systems fail in non-obvious ways:
->
-> - Duplicate requests → multiple captures  
-> - Partial failures → inconsistent state  
-> - Concurrent refunds → over-refund  
-> - Missed webhooks → lost financial updates  
->
-> Preventing retries is impossible.  
-> The real problem is:
->
-> 👉 **Ensuring financial correctness despite retries, failures, and concurrency**
+
+- Duplicate requests → multiple captures  
+- Partial failures → inconsistent state  
+- Concurrent refunds → over-refund  
+- Missed webhooks → lost financial updates  
+
+ Preventing retries is impossible.  
+ The real problem is:
+
+  👉 **Ensuring financial correctness despite retries, failures, and concurrency**
 
 ---
 
@@ -63,18 +63,18 @@ Under real-world conditions:
 
 ## Core Design Principle
 
-> The system is built on a single invariant:
->
-> 👉 **Financial state must always be correct and derivable from history**
->
-> This is achieved by:
->
-> - Using an **append-only ledger** as the source of truth  
-> - Deriving state asynchronously via projection  
-> - Enforcing **idempotency at every layer**  
-> - Using a **reservation model** to prevent over-refund  
->
-> Correctness is enforced by design, not by retry logic.
+The system is built on a single invariant:
+
+👉 **Financial state must always be correct and derivable from history**
+
+ This is achieved by:
+
+ - Using an **append-only ledger** as the source of truth  
+ - Deriving state asynchronously via projection  
+ - Enforcing **idempotency at every layer**  
+ - Using a **reservation model** to prevent over-refund  
+
+ Correctness is enforced by design, not by retry logic.
 
 ---
 
