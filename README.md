@@ -6,11 +6,11 @@ A payment system that **guarantees financial correctness under retries, crashes,
 
 ### 🚀 Key Highlights
 
-> - No duplicate financial effects under retries and crashes  
-> - No over-refund under concurrent requests  
-> - Crash-safe recovery via deterministic ledger replay  
-> - Idempotency enforced across API, database, and event layers  
-> - Designed for failure as the default condition  
+- No duplicate financial effects under retries and crashes  
+- No over-refund under concurrent requests  
+- Crash-safe recovery via deterministic ledger replay  
+- Idempotency enforced across API, database, and event layers  
+- Designed for failure as the default condition  
 
 --- 
 
