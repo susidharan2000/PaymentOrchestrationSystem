@@ -1,16 +1,16 @@
 # Payment Orchestration System
 
- A payment system that **guarantees financial correctness under retries, crashes, and concurrency**.
+A payment system that **guarantees financial correctness under retries, crashes, and concurrency**.
 
 ---
 
 ### 🚀 Key Highlights
 
-> - Guarantees **no duplicate financial effects** under retries and crashes  
-> - Prevents **over-refund under concurrent requests** using reservation model  
-> - Uses **append-only ledger** as source of truth for deterministic replay  
-> - Enforces **idempotency across API, DB, and event layers**  
-> - Designed for **failure as default condition**, not success  
+> - No duplicate financial effects under retries and crashes  
+> - No over-refund under concurrent requests  
+> - Crash-safe recovery via deterministic ledger replay  
+> - Idempotency enforced across API, database, and event layers  
+> - Designed for failure as the default condition  
 
 --- 
 
@@ -22,7 +22,7 @@ _**Extensibility**: Multi-PSP (adapter pattern), multi-tenant via scoped idempot
 
 ## Overview
 
-> Payment Orchestration System is a backend system designed to process payments and refunds **without creating incorrect financial state under failure**.
+ Payment Orchestration System is a backend system designed to process payments and refunds **without creating incorrect financial state under failure**.
 >
 > The system is intentionally built around correctness:
 > - All financial actions are persisted as immutable events  
@@ -34,7 +34,7 @@ _**Extensibility**: Multi-PSP (adapter pattern), multi-tenant via scoped idempot
 
 ## Problem Statement
 
-> Payment systems fail in non-obvious ways:
+Payment systems fail in non-obvious ways:
 >
 > - Duplicate requests → multiple captures  
 > - Partial failures → inconsistent state  
