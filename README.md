@@ -1,6 +1,6 @@
 # Payment Orchestration System
 
-> A payment system that **guarantees financial correctness under retries, crashes, and concurrency**.
+ A payment system that **guarantees financial correctness under retries, crashes, and concurrency**.
 
 ---
 
@@ -12,11 +12,6 @@
 > - Enforces **idempotency across API, DB, and event layers**  
 > - Designed for **failure as default condition**, not success  
 
----
-
-> Most systems optimize for success cases.  
-> This system is designed for **failure as the default condition**.
->
 --- 
 
 _**Tech Stack**: Go, PostgreSQL_  
