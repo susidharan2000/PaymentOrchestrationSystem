@@ -117,7 +117,7 @@ func (r *repo) RecordPaymentSuccess(paymentDetails WebhookPaymentDetails, tx *sq
         FROM payment.payment_intent pi
         WHERE pi.psp_ref_id = $1
         AND pi.status = 'PROCESSING'
-        ON CONFLICT (psp_name, psp_ref_id) DO NOTHING;
+        ON CONFLICT (psp_name, psp_ref_id, entry_type) DO NOTHING;
 	`
 	res, err := tx.Exec(query, paymentDetails.PiID, "PAYMENT", paymentDetails.Amount, paymentDetails.Currency, paymentDetails.PspName)
 	if err != nil {
@@ -168,7 +168,7 @@ func (r *repo) RecordRefundSuccess(pspRefundID string, tx *sql.Tx) error {
 	WHERE r.psp_refund_id = $2
 	AND r.status = 'PROCESSING'
 	AND r.psp_refund_id IS NOT NULL
-	ON CONFLICT (psp_name, psp_ref_id) DO NOTHING;
+	ON CONFLICT (psp_name, psp_ref_id, entry_type) DO NOTHING;
 	`
 	res, err := tx.Exec(query, "REFUND", pspRefundID)
 	if err != nil {

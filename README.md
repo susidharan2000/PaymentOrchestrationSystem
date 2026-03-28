@@ -7,7 +7,7 @@
 >
 > _**Tech Stack**: Go, PostgreSQL_
 
-> _**Key Design Choices**:
+> **Key Design Choices**:
 > - Append-only ledger (source of truth)
 > - Idempotency enforcement across all layers
 > - Background workers using FOR UPDATE SKIP LOCKED
@@ -229,7 +229,9 @@ These trade-offs simplify correctness and failure handling.
 
 ---
 
-Create a ⁠ .env ⁠ file:
+## ⚙️ Configuration
+
+Create a `.env` file in the project root:
 
 ```env
 # Database
@@ -246,10 +248,13 @@ WEBHOOK_WORKER_COUNT=10
 
 # Payment Reconciliation
 PAYMENT_RECONCILER_BATCH_SIZE=10
-PAYMENT_RECONCILER_CONCURRENCY=5
+PAYMENT_RECONCILER_CONCURRENCY=10
 
 # Refund Reconciliation
 REFUND_RECONCILER_BATCH_SIZE=10
-REFUND_RECONCILER_CONCURRENCY=5
-
+REFUND_RECONCILER_CONCURRENCY=10
 ```
+
+
+
+

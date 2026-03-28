@@ -31,7 +31,7 @@ func (r *repo) PersistPaymentRequest(req model.CreatePaymentRequest, requestHash
 	var existingHash string
 	var created bool
 	query := `INSERT INTO payment.payment_intent (payment_id,idempotency_key,status,amount,currency,psp_name,request_hash) VALUES ($1,$2,'CREATED',$3,$4,$5,$6)
-	ON CONFLICT (idempotency_key)
+	ON CONFLICT (psp_name, idempotency_key)
 	DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
 	RETURNING payment_id,amount,currency,request_hash,psp_ref_id,(xmax = 0) AS created;`
 	err := r.db.QueryRow(query, paymentId, req.IdempotencyKey, req.Amount, req.Currency, req.PspName, requestHash).Scan(&paymentDetails.PaymentId, &paymentDetails.Amount, &paymentDetails.Currency, &existingHash, &paymentDetails.PspRefID, &created)

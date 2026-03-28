@@ -97,7 +97,7 @@ func (r *repo) RecordPaymentSuccess(paymentDetails Payment) error {
 	query := `INSERT INTO payment.ledger_entries (entry_type, payment_id, amount, currency, psp_name, psp_ref_id) SELECT 'PAYMENT', pi.payment_id, $2, $3, $4, $1
         FROM payment.payment_intent pi
         WHERE pi.psp_ref_id = $1
-        ON CONFLICT (psp_name, psp_ref_id) DO NOTHING;
+        ON CONFLICT (psp_name, psp_ref_id, entry_type) DO NOTHING;
 	`
 	if _, err := tx.Exec(query, paymentDetails.PspRefID, paymentDetails.Amount, paymentDetails.Currency, paymentDetails.PspName); err != nil {
 		return err
@@ -221,7 +221,7 @@ func (r *repo) RefundSuccessEntry(refundPayment Refund) error {
 	FROM payment.refund_record r
 	WHERE r.refund_entry_id = $1
 	AND r.psp_refund_id IS NOT NULL
-	ON CONFLICT (psp_name, psp_ref_id) DO NOTHING;
+	ON CONFLICT (psp_name, psp_ref_id, entry_type) DO NOTHING;
 	`
 	_, err = tx.Exec(query, refundPayment.RefundID)
 	if err != nil {
