@@ -1,17 +1,32 @@
 # Payment Orchestration System
 
-> A payment system that **never produces incorrect financial state**, even under retries, crashes, and concurrent operations.
+> A payment system that **guarantees financial correctness under retries, crashes, and concurrency**.
+
+### 🚀 Key Highlights
+
+> - Guarantees **no duplicate financial effects** under retries and crashes  
+> - Prevents **over-refund under concurrent requests** using reservation model  
+> - Uses **append-only ledger** as source of truth for deterministic replay  
+> - Enforces **idempotency across API, DB, and event layers**  
+> - Designed for **failure as default condition**, not success  
+
+---
 
 > Most systems optimize for success cases.  
 > This system is designed for **failure as the default condition**.
 >
-> _**Tech Stack**: Go, PostgreSQL_
+--- 
 
-> **Key Design Choices**:
-> - Append-only ledger (source of truth)
-> - Idempotency enforcement across all layers
-> - Background workers using FOR UPDATE SKIP LOCKED
-> - Event-driven projection model (eventual consistency)
+_**Tech Stack**: Go, PostgreSQL_  
+_**System Scope**: Single-tenant, single-PSP (Stripe)_  
+_**Extensibility**: Multi-PSP (adapter pattern), multi-tenant via scoped idempotency_
+
+> **What this system guarantees:**
+> - No duplicate financial effects under retries  
+> - No over-refund under concurrency  
+> - Crash-safe recovery via deterministic replay  
+> - Financial state derived entirely from immutable history  
+
 ---
 
 ## Overview
@@ -22,8 +37,8 @@
 > - All financial actions are persisted as immutable events  
 > - Execution is idempotent across all layers  
 > - Failures are expected and handled deterministically  
+
 >
-> Unlike typical systems that mutate state directly, this system treats financial operations as immutable facts and derives state from them.
 ---
 
 ## Problem Statement
@@ -44,19 +59,14 @@
 
 ## Why naive systems fail
 
-A naive system directly updates payment state during request handling.
+Naive systems directly mutate state during request handling.
 
-This breaks under real-world conditions:
+Under real-world conditions:
+- Retries → duplicate effects  
+- Crashes → partial state  
+- Concurrency → race conditions  
 
-- Retries → duplicate charges or refunds  
-- Crashes → partial state updates  
-- Concurrency → race conditions and over-refund  
-
-This system avoids these issues by:
-
-- Recording only **confirmed financial events**
-- Separating **intent from execution**
-- Deriving state instead of mutating it directly
+👉 Direct state mutation cannot guarantee correctness.
 
 ---
 
@@ -135,15 +145,6 @@ Refunds use row-level locking and a reservation model:
 
 ---
 
-## Design Philosophy
-
-The system prioritizes:
-- Correctness over performance  
-- Determinism over convenience  
-- Failure recovery over success-path optimization  
-
----
-
 ## System Guarantees
 
 This system guarantees:
@@ -160,7 +161,6 @@ Duplicate processing is allowed by design but does not affect correctness.
 ---
 
 ## Performance Characteristics
-
 System performance depends on workload characteristics:
 
 | Component | Bottleneck |
